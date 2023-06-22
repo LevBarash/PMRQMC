@@ -1,0 +1,22 @@
+
+Exact values of mean energy:
+
+H_heis4_rotated: -6.5384
+
+H_heis5_rotated: -7.71032
+
+H_heis6_rotated: -10.237
+
+H_heis6_rotated_modified: -11.0335
+
+H_neg_triangle1: -8.3751
+
+H_neg_triangle2: -10.523
+
+H_tfim4: -6.606335
+
+H_ZZ-XX_plaq: -5.07019
+
+H_ZZ-XX_triangle: -3.25382 
+
+H_ZZ+XX_triangle: -1.86643
