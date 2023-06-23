@@ -16,11 +16,10 @@
 #include <algorithm>
 #include <numeric>
 #include <cmath>
-#include "boost/dynamic_bitset/dynamic_bitset.hpp"
-
-#define dbitset boost::dynamic_bitset<>
 
 using namespace std;
+
+#define dbitset vector<char>
 
 int no_qubit = 0; // number of qubits is a global variable!
 
@@ -366,7 +365,15 @@ vector<vector<int>> bit_to_intvec(vector<vector<bool>> bitsetVec){
 // ------------- Functions to compute the Zs and Ps and coefficients ----------
 struct BitsetComparator {
     bool operator()(const dbitset& lhs, const dbitset& rhs) const {
-        return lhs.to_ulong() < rhs.to_ulong();
+        int i = lhs.size()-1, j = rhs.size()-1, ans = 0;
+        while(i >= 0 && lhs[i] == 0) i--;
+        while(j >= 0 && rhs[i] == 0) j--;
+        if(i < j) ans = 1; else if(i == j){
+            while(i >= 0 && lhs[i] == rhs[i]) i--;
+            if(i >= 0 && lhs[i] < rhs[i]) ans = 1;
+	}
+	return ans;
+        // return lhs.to_ulong() < rhs.to_ulong();
     }
 }; // This struct is for bitset comparison (in order to sort the bitsets)
 
@@ -404,13 +411,15 @@ PZdata PZcomp(const vector<pair<complex<double>,vector<int>>>& data) {
                 no_qubit = qubit;
             if (pauli_j == 1) {
 		if(qubit > bit_num.size()) bit_num.resize(qubit);
-                bit_num.set(qubit-1, true);
+                bit_num[qubit-1] = 1;
+                // bit_num.set(qubit-1, true);
                 // Add a 1 in the num-th position from the right of the bit string 
             } else if (pauli_j == 2) {
 		if(qubit > bit_num.size()) bit_num.resize(qubit);
                 //cpp_int perm_term = 1 << (qubit - 1);
                 //num += perm_term;
-                bit_num.set(qubit-1, true);
+                bit_num[qubit-1] = 1;
+                // bit_num.set(qubit-1, true);
                 coeff_i *= complex<double>(0, 1);
                 zs_i.push_back(qubit);
             } else if (pauli_j == 3) {
@@ -493,6 +502,10 @@ PZdata PZcomp(const vector<pair<complex<double>,vector<int>>>& data) {
     return PZ_data;
 }
 
+int none(dbitset v){
+    return std::all_of(v.begin(), v.end(), [](int i) { return i==0; });
+}
+
 void main1(int argc , char* argv[]){
     string fileName(argv[1]);  // Reading the name of the input .txt file describing the Hamiltonian
     vector<pair<complex<double>, vector<int>>> data = data_extract(fileName);
@@ -515,7 +528,7 @@ void main1(int argc , char* argv[]){
 
     // Convert Ps indices into vector of ints
     vector<vector<bool>> Ps_nontrivial = Ps;
-    if(Ps_bit[0].none()){
+    if(none(Ps_bit[0])){
         Ps_nontrivial.erase(Ps_nontrivial.begin());
         D0_exists = true;
     }
@@ -747,7 +760,7 @@ void main2(int argc , char* argv[]){
 
     // Convert Ps indices into vector of bools
     vector<vector<bool>> Ps_Ham_nontrivial = Ps_Ham;
-    if(Ps_bit_Ham[0].none()){
+    if(none(Ps_bit_Ham[0])){
         Ps_Ham_nontrivial.erase(Ps_Ham_nontrivial.begin());
         D0_exists = true;
     }
@@ -756,7 +769,7 @@ void main2(int argc , char* argv[]){
     vector<vector<bool>> Ps_Op_nontrivial[Nobservables];
     for(int O=0;O<Nobservables;O++){
        Ps_Op_nontrivial[O]= Ps_Op[O];
-       if(Ps_bit_Op[O][0].none()){
+       if(none(Ps_bit_Op[O][0])){
            Ps_Op_nontrivial[O].erase(Ps_Op_nontrivial[O].begin());
            P0_exists[O] = true;
        }
