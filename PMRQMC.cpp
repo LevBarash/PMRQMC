@@ -12,6 +12,7 @@
 //
 
 #include<iostream>
+#include<iomanip>
 #include<random>
 #include<cstdlib>
 #include<algorithm>
@@ -50,9 +51,16 @@ int cycles_used[Ncycles];
 int n_cycles[Nop+3]; // numbers of cycles of lengths 0,1,2,...,Nop+2, the last three values are always zeros.
 int cycle_min_len, cycle_max_len, found_cycles, min_index, max_index;
 
+#ifndef MEASURE_observables
+#define Nobservables 0
+#endif
+
+const int N_all_observables = Nobservables + 6;
+int valid_observable[N_all_observables];
+
 int bin_length = measurements / Nbins;
-double in_bin_sum[Nobservables];
-double bin_mean[Nobservables][Nbins];
+double in_bin_sum[N_all_observables];
+double bin_mean[N_all_observables][Nbins];
 double in_bin_sum_sgn;
 double bin_mean_sgn[Nbins];
 
@@ -184,7 +192,29 @@ void init(){
 	cycle_max_len = 0; for(i=0;i<Ncycles;i++) cycle_max_len = max(cycle_max_len,cycle_len[i]);
 	for(i=0;i<Ncycles;i++) cycles_used[i] = 0;
 	for(i=0;i<Nop+3;i++) n_cycles[i] = 0; for(i=0;i<Ncycles;i++) n_cycles[cycle_len[i]]++;
-	for(i=0;i<Nobservables;i++) in_bin_sum[i] = 0; in_bin_sum_sgn = 0;
+	for(i=0;i<N_all_observables;i++) in_bin_sum[i] = 0; in_bin_sum_sgn = 0;
+	for(i=0;i<N_all_observables;i++) valid_observable[i] = 0;
+#ifdef MEASURE_observables
+	for(i=0;i<Nobservables;i++) valid_observable[i] = 1;
+#endif
+#ifdef MEASURE_H
+	valid_observable[Nobservables] = 1;
+#endif
+#ifdef MEASURE_H2
+	valid_observable[Nobservables + 1] = 1;
+#endif
+#ifdef MEASURE_Hdiag
+	valid_observable[Nobservables + 2] = 1;
+#endif
+#ifdef MEASURE_Hdiag2
+	valid_observable[Nobservables + 3] = 1;
+#endif
+#ifdef MEASURE_Hoffdiag
+	valid_observable[Nobservables + 4] = 1;
+#endif
+#ifdef MEASURE_Hoffdiag2
+	valid_observable[Nobservables + 5] = 1;
+#endif
 }
 
 double Metropolis(ExExFloat newWeight){
@@ -287,6 +317,8 @@ void update(){
 double meanq = 0;
 double maxq = 0;
 
+#ifdef MEASURE_observables
+
 double calc_MD0(int n){ // calculate <z | MD_0 | z> for the current configuration of spins and observable n
 	double sum = 0;
 	for(int i=0;i<MD0_size[n];i++) sum -= (2*(int((MD0_product[n][i] & (~lattice)).count())%2)-1) * MD0_coeff[n][i];
@@ -299,16 +331,84 @@ double calc_MD(int n, int k){ // calculate d_k = <z | MD_k | z> for the current 
 	return sum;
 }
 
+#endif
+
+double measure_H(){
+	double R = d->z[q]/(-beta);
+	if(q > 0) R += (d->divdiffs[q-1]/d->divdiffs[q]).get_double()*q/(-beta);
+	return R;
+}
+
+double measure_H2(){
+	double R = (d->z[q]/(-beta))*(d->z[q]/(-beta));
+	if(q>0) R += (d->z[q]/(-beta) + d->z[q-1]/(-beta))*(d->divdiffs[q-1]/d->divdiffs[q]).get_double()*q/(-beta);
+	if(q>1) R += (d->divdiffs[q-2]/d->divdiffs[q]).get_double()*(q*(q-1))/(-beta)/(-beta);
+	return R;
+}
+
+double measure_Hdiag(){
+	return currEnergy;
+}
+
+double measure_Hdiag2(){
+	return currEnergy*currEnergy;
+}
+
+double measure_Hoffdiag(){
+	double R = 0; int i,k; GetWeight();
+	if(q > 0)  R += (d->divdiffs[q-1]/d->divdiffs[q]).get_double() *
+			(beta_pow_factorial[q-1]/beta_pow_factorial[q]) *
+			(currD_partial[q-1]/currD) * calc_d(Sq[q-1]);
+	return R;
+}
+
+double measure_Hoffdiag2(){
+	double R = (d->z[q]/(-beta))*(d->z[q]/(-beta)) + currEnergy*(currEnergy - 2*measure_H());
+	if(q>0) R += (d->z[q]/(-beta) + d->z[q-1]/(-beta))*(d->divdiffs[q-1]/d->divdiffs[q]).get_double()*q/(-beta);
+	if(q>1) R += (d->divdiffs[q-2]/d->divdiffs[q]).get_double()*(q*(q-1))/(-beta)/(-beta);
+	return R;
+}
+
+std::string name_of_observable(int n){
+	std::string s;
+	if(n < Nobservables)
+#ifdef MEASURE_observables
+		s = Mnames[n];
+#else
+		;
+#endif
+	else switch(n-Nobservables){
+			case 0: s = "H";         break;
+			case 1: s = "H2";        break;
+			case 2: s = "Hdiag";     break;
+			case 3: s = "Hdiag2";    break;
+			case 4: s = "Hoffdiag";  break;
+			case 5: s = "Hoffdiag2"; break;
+	}
+	return s;
+}
+
 double measure_observable(int n){
-	double R; int i,k,len,cont;
-	GetWeight(); R = calc_MD0(n);
-	for(k=0;k<MNop[n];k++){
-		P = MP[n][k]; len = P.count(); if(len>q) continue;
-		if(!NoRepetitionCheck(Sq+(q-len),len)) continue;
-		cont = 0; for(i=0;i<len;i++) if(!P.test(Sq[q-1-i])){ cont = 1; break;} if(cont) continue;
-		R +=	(d->divdiffs[q-len]/d->divdiffs[q]).get_double() *
-			(beta_pow_factorial[q-len]/beta_pow_factorial[q]/factorial[len]) *
-			(currD_partial[q-len]/currD) * calc_MD(n,k);
+	double R = 0; int i,k,len,cont;
+	if(valid_observable[n]) if(n < Nobservables){
+#ifdef MEASURE_observables
+		GetWeight(); R = calc_MD0(n);
+		for(k=0;k<MNop[n];k++){
+			P = MP[n][k]; len = P.count(); if(len>q) continue;
+			if(!NoRepetitionCheck(Sq+(q-len),len)) continue;
+			cont = 0; for(i=0;i<len;i++) if(!P.test(Sq[q-1-i])){ cont = 1; break;} if(cont) continue;
+			R +=	(d->divdiffs[q-len]/d->divdiffs[q]).get_double() *
+				(beta_pow_factorial[q-len]/beta_pow_factorial[q]/factorial[len]) *
+				(currD_partial[q-len]/currD) * calc_MD(n,k);
+		}
+#endif
+	} else  switch(n-Nobservables){
+			case 0:	R = measure_H(); break;
+			case 1:	R = measure_H2(); break;
+			case 2:	R = measure_Hdiag(); break;
+			case 3:	R = measure_Hdiag2(); break;
+			case 4:	R = measure_Hoffdiag(); break;
+			case 5:	R = measure_Hoffdiag2(); break;
 	}
 	return R;
 }
@@ -319,7 +419,7 @@ void measure(){
 	if((measurement_step+1) % bin_length == 0){
 		in_bin_sum_sgn /= bin_length; bin_mean_sgn[measurement_step/bin_length] = in_bin_sum_sgn; in_bin_sum_sgn = 0;
 	}
-	for(i=0;i<Nobservables;i++){
+	for(i=0;i<N_all_observables;i++){
 		R = measure_observable(i); in_bin_sum[i] += R*sgn;
 		if((measurement_step+1) % bin_length == 0){
 			in_bin_sum[i] /= bin_length; bin_mean[i][measurement_step/bin_length] = in_bin_sum[i]; in_bin_sum[i] = 0;
@@ -331,24 +431,25 @@ double get_cpu_time(){ return (double)clock() / CLOCKS_PER_SEC;}
 
 int main(int argc, char* argv[]){
 	double start_time = get_cpu_time();
-	double Rsum[Nobservables] = {0}; double sgn_sum = 0;
-	double over_bins_sum[Nobservables] = {0}; double over_bins_sum_sgn = 0;
-	double over_bins_sum_cov[Nobservables] = {0}; double mean[Nobservables]; double stdev[Nobservables];
-	int i,k; divdiff_init(); divdiff dd(q+4,500); d=&dd; init();
+	double Rsum[N_all_observables] = {0}; double sgn_sum = 0;
+	double over_bins_sum[N_all_observables] = {0}; double over_bins_sum_sgn = 0;
+	double over_bins_sum_cov[N_all_observables] = {0}; double mean[N_all_observables]; double stdev[N_all_observables];
+	int i,k,o=0; divdiff_init(); divdiff dd(q+4,500); d=&dd; init();
 	for(step=0;step<Tsteps;step++) update();
 	for(measurement_step=0;measurement_step<measurements;measurement_step++){
 		for(step=0;step<stepsPerMeasurement;step++) update(); measure();
 	}
 	for(i=0;i<Nbins;i++) sgn_sum += bin_mean_sgn[i]; sgn_sum /= Nbins;
 	for(i=0;i<Nbins;i++) over_bins_sum_sgn += (bin_mean_sgn[i] - sgn_sum)*(bin_mean_sgn[i] - sgn_sum); over_bins_sum_sgn /= (Nbins*(Nbins-1));
+	std::cout << std::setprecision(9);
 	std::cout << "mean(sgn(W)) = " << sgn_sum << std::endl;
 	std::cout << "std.dev.(sgn(W)) = " << sqrt(over_bins_sum_sgn) << std::endl;
 	if(qmax_achieved) std::cout << "Warning: qmax = " << qmax << "was achieved" << std::endl;
 	for(i=0;i<Ncycles;i++) if(!cycles_used[i]) std::cout << "Warning: cycle No. " << i << "was not used" << std::endl;
 	std::cout << "mean(q) = " << meanq / measurements << std::endl;
 	std::cout << "max(q) = "<< maxq << std::endl;
-	for(k=0;k<Nobservables;k++){
-		std::cout << "Observable #" << k << ": "<< Mnames[k] << std::endl;
+	for(k=0;k<N_all_observables;k++) if(valid_observable[k]){
+		std::cout << "Observable #" << ++o << ": "<< name_of_observable(k) << std::endl;
 		for(i=0;i<Nbins;i++) Rsum[k] += bin_mean[k][i]; Rsum[k] /= Nbins;
 		for(i=0;i<Nbins;i++) over_bins_sum[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean[k][i] - Rsum[k]); over_bins_sum[k] /= (Nbins*(Nbins-1));
 		for(i=0;i<Nbins;i++) over_bins_sum_cov[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean_sgn[i] - sgn_sum); over_bins_sum_cov[k] /= (Nbins*(Nbins-1));

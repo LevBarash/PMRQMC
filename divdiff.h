@@ -294,5 +294,4 @@ void AddAll(int len, int force_s = 0){ // input is taken from z, output is writt
 	AddElement(z[0],s,mean(z,len));
 	for(i=1;i<len;i++) AddElement(z[i]); // calculates the vector (d[z_0], 1! d[z_0,z_1], ..., n! d[z_0,z_1,...,z_n]).
 }
-
 };

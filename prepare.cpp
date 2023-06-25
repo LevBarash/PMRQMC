@@ -842,6 +842,7 @@ void main2(int argc , char* argv[]){
     }
 
     if(output.is_open()){
+	output << "#define MEASURE_observables" << endl << endl;
         output << "const int Nobservables = " << Nobservables << ";" << endl;
 
         int no_ops_max = 0; for(int O=0; O<Nobservables; O++) no_ops_max = max(no_ops_max, no_ops[O]);
@@ -1032,12 +1033,17 @@ void main2(int argc , char* argv[]){
 }
 
 int main(int argc , char* argv[]){
-    if(argc<3){ cout << "Usage: ./prepare.bin hamiltonian.txt observable_1.txt observable_2.txt ..." << endl; exit(1);}
+    if(argc < 2){ cout << "Usage: ./prepare.bin hamiltonian.txt observable_1.txt observable_2.txt ..." << endl; exit(1);}
     cout << "Preparing PMR for the Hamiltonian and computing the list of fundamental cycles...";
     main1(argc, argv);
     cout << "done" << endl;
-    cout << "Preparing PMR for the observables and their representation via the permutation operators of the Hamiltonian...";
-    main2(argc, argv);
-    cout << "done" << endl;
+    if(argc >= 3){
+       cout << "Preparing PMR for the observables and their representation via the permutation operators of the Hamiltonian...";
+       main2(argc, argv);
+       cout << "done" << endl;
+    } else{
+       std::ofstream output("observables.h");
+       output.close();
+    }
     return 0;
 }
