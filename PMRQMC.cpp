@@ -51,7 +51,7 @@ int cycles_used[Ncycles];
 int n_cycles[Nop+3]; // numbers of cycles of lengths 0,1,2,...,Nop+2, the last three values are always zeros.
 int cycle_min_len, cycle_max_len, found_cycles, min_index, max_index;
 
-#ifndef MEASURE_observables
+#ifndef MEASURE_OBSERVABLES
 #define Nobservables 0
 #endif
 
@@ -194,7 +194,7 @@ void init(){
 	for(i=0;i<Nop+3;i++) n_cycles[i] = 0; for(i=0;i<Ncycles;i++) n_cycles[cycle_len[i]]++;
 	for(i=0;i<N_all_observables;i++) in_bin_sum[i] = 0; in_bin_sum_sgn = 0;
 	for(i=0;i<N_all_observables;i++) valid_observable[i] = 0;
-#ifdef MEASURE_observables
+#ifdef MEASURE_OBSERVABLES
 	for(i=0;i<Nobservables;i++) valid_observable[i] = 1;
 #endif
 #ifdef MEASURE_H
@@ -203,16 +203,16 @@ void init(){
 #ifdef MEASURE_H2
 	valid_observable[Nobservables + 1] = 1;
 #endif
-#ifdef MEASURE_Hdiag
+#ifdef MEASURE_HDIAG
 	valid_observable[Nobservables + 2] = 1;
 #endif
-#ifdef MEASURE_Hdiag2
+#ifdef MEASURE_HDIAG2
 	valid_observable[Nobservables + 3] = 1;
 #endif
-#ifdef MEASURE_Hoffdiag
+#ifdef MEASURE_HOFFDIAG
 	valid_observable[Nobservables + 4] = 1;
 #endif
-#ifdef MEASURE_Hoffdiag2
+#ifdef MEASURE_HOFFDIAG2
 	valid_observable[Nobservables + 5] = 1;
 #endif
 }
@@ -317,7 +317,7 @@ void update(){
 double meanq = 0;
 double maxq = 0;
 
-#ifdef MEASURE_observables
+#ifdef MEASURE_OBSERVABLES
 
 double calc_MD0(int n){ // calculate <z | MD_0 | z> for the current configuration of spins and observable n
 	double sum = 0;
@@ -355,7 +355,7 @@ double measure_Hdiag2(){
 }
 
 double measure_Hoffdiag(){
-	double R = 0; int i,k; GetWeight();
+	double R = 0;
 	if(q > 0)  R += (d->divdiffs[q-1]/d->divdiffs[q]).get_double() *
 			(beta_pow_factorial[q-1]/beta_pow_factorial[q]) *
 			(currD_partial[q-1]/currD) * calc_d(Sq[q-1]);
@@ -371,13 +371,11 @@ double measure_Hoffdiag2(){
 
 std::string name_of_observable(int n){
 	std::string s;
-	if(n < Nobservables)
-#ifdef MEASURE_observables
+	if(n < Nobservables){
+#ifdef MEASURE_OBSERVABLES
 		s = Mnames[n];
-#else
-		;
 #endif
-	else switch(n-Nobservables){
+	} else switch(n-Nobservables){
 			case 0: s = "H";             break;
 			case 1: s = "H^2";           break;
 			case 2: s = "H_{diag}";      break;
@@ -391,8 +389,8 @@ std::string name_of_observable(int n){
 double measure_observable(int n){
 	double R = 0; int i,k,len,cont;
 	if(valid_observable[n]) if(n < Nobservables){
-#ifdef MEASURE_observables
-		GetWeight(); R = calc_MD0(n);
+#ifdef MEASURE_OBSERVABLES
+		R = calc_MD0(n);
 		for(k=0;k<MNop[n];k++){
 			P = MP[n][k]; len = P.count(); if(len>q) continue;
 			if(!NoRepetitionCheck(Sq+(q-len),len)) continue;
@@ -414,7 +412,8 @@ double measure_observable(int n){
 }
 
 void measure(){
-	double R, sgn = currWeight.sgn(); int i;
+	double R, sgn; int i;
+	GetWeight(); sgn = currWeight.sgn();
 	meanq += q; if(maxq < q) maxq = q; in_bin_sum_sgn += sgn;
 	if((measurement_step+1) % bin_length == 0){
 		in_bin_sum_sgn /= bin_length; bin_mean_sgn[measurement_step/bin_length] = in_bin_sum_sgn; in_bin_sum_sgn = 0;

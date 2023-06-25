@@ -842,7 +842,7 @@ void main2(int argc , char* argv[]){
     }
 
     if(output.is_open()){
-	output << "#define MEASURE_observables" << endl << endl;
+	output << "#define MEASURE_OBSERVABLES" << endl << endl;
         output << "const int Nobservables = " << Nobservables << ";" << endl;
 
         int no_ops_max = 0; for(int O=0; O<Nobservables; O++) no_ops_max = max(no_ops_max, no_ops[O]);

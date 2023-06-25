@@ -23,7 +23,7 @@
 
 #define MEASURE_H                    // <H>             is measured when this line is not commented
 #define MEASURE_H2                   // <H^2>           is measured when this line is not commented
-#define MEASURE_Hdiag                // <H_{diag}>      is measured when this line is not commented
-#define MEASURE_Hdiag2               // <H_{diag}^2>    is measured when this line is not commented
-#define MEASURE_Hoffdiag             // <H_{offdiag}>   is measured when this line is not commented
-#define MEASURE_Hoffdiag2            // <H_{offdiag}^2> is measured when this line is not commented
+#define MEASURE_HDIAG                // <H_{diag}>      is measured when this line is not commented
+#define MEASURE_HDIAG2               // <H_{diag}^2>    is measured when this line is not commented
+#define MEASURE_HOFFDIAG             // <H_{offdiag}>   is measured when this line is not commented
+#define MEASURE_HOFFDIAG2            // <H_{offdiag}^2> is measured when this line is not commented
