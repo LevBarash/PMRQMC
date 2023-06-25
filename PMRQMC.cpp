@@ -378,12 +378,12 @@ std::string name_of_observable(int n){
 		;
 #endif
 	else switch(n-Nobservables){
-			case 0: s = "H";         break;
-			case 1: s = "H2";        break;
-			case 2: s = "Hdiag";     break;
-			case 3: s = "Hdiag2";    break;
-			case 4: s = "Hoffdiag";  break;
-			case 5: s = "Hoffdiag2"; break;
+			case 0: s = "H";             break;
+			case 1: s = "H^2";           break;
+			case 2: s = "H_{diag}";      break;
+			case 3: s = "H_{diag}^2";    break;
+			case 4: s = "H_{offdiag}";   break;
+			case 5: s = "H_{offdiag}^2"; break;
 	}
 	return s;
 }
