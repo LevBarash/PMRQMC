@@ -18,8 +18,7 @@
 #include<algorithm>
 #include<bitset>
 #include"divdiff.h"
-#include"hamiltonian.h" // use a header file, which defines the Hamiltonian
-#include"observables.h" // use a header file, which defines the observables
+#include"hamiltonian.h" // use a header file, which defines the Hamiltonian and the custom observables
 #include"parameters.h"  // parameters of the simulation such as the number of Monte-Carlo updates
 
 #define measurements (steps/stepsPerMeasurement)
@@ -442,7 +441,7 @@ int main(int argc, char* argv[]){
 	std::cout << "mean(sgn(W)) = " << sgn_sum << std::endl;
 	std::cout << "std.dev.(sgn(W)) = " << sqrt(over_bins_sum_sgn) << std::endl;
 	if(qmax_achieved) std::cout << "Warning: qmax = " << qmax << " was achieved" << std::endl;
-	for(i=0;i<Ncycles;i++) if(!cycles_used[i]) std::cout << "Warning: cycle No. " << i << " was not used" << std::endl;
+	for(i=0;i<Ncycles;i++) if(!cycles_used[i]) std::cout << "Warning: cycle No. " << i << " of length " << cycle_len[i] << " was not used" << std::endl;
 	std::cout << "mean(q) = " << meanq / measurements << std::endl;
 	std::cout << "max(q) = "<< maxq << std::endl;
 	for(k=0;k<N_all_observables;k++) if(valid_observable[k]){

@@ -10,9 +10,9 @@
 // Below are the parameter values:
 //
 
-#define Tsteps 1000000ull            // number of Monte-Carlo initial equilibration updates (use "ull" suffix for unsigned long long)
-#define steps  10000000ull           // number of Monte-Carlo updates (use "ull" suffix for unsigned long long)
-#define stepsPerMeasurement 100ull   // number of Monte-Carlo updates per measurement (use "ull" suffix for unsigned long long)
+#define Tsteps 1000000               // number of Monte-Carlo initial equilibration updates
+#define steps  10000000              // number of Monte-Carlo updates
+#define stepsPerMeasurement 100      // number of Monte-Carlo updates per measurement
 
 //
 // Below is the list of standard observables:

@@ -126,7 +126,8 @@ int Int_sum(vector<int> vec){
 }
 
 // This function minimizes the size of the cycles (nullspace basis vectors with least 1s):
-void cycle_minimize(vector<vector<int>>& null_eigs){
+int cycle_minimize(vector<vector<int>>& null_eigs){
+    int changes_made = 0;
     int null_size = null_eigs.size();
 
     vector<int> null_n(null_size);
@@ -163,23 +164,25 @@ void cycle_minimize(vector<vector<int>>& null_eigs){
             vector<int> high_to_min = GF2_add(high_eig_k , null_eigs[null_eigs_min_ind[l]]);
             int low_k = Int_sum(high_to_min);
             if(low_k <= 3){
-                null_eigs[null_eigs_high_ind[k]] = high_to_min;
+                null_eigs[null_eigs_high_ind[k]] = high_to_min; changes_made = 1;
                 null_eigs_min_ind.push_back(null_eigs_high_ind[k]);
                 std::sort(null_eigs_min_ind.begin() , null_eigs_min_ind.end());
                 break;
             }
             else if(low_k < null_k){
-                null_eigs[null_eigs_high_ind[k]] = high_to_min;
+                null_eigs[null_eigs_high_ind[k]] = high_to_min; changes_made = 1;
                 high_eig_k = high_to_min;
             }
         }
     }
+    return changes_made;
 }
 
 // This function minimizes the size of the cycles (nullspace basis vectors with least 1s):
 // This Eig_minimize is specifically designed for operator permutations, and functions differently
 //      than the one in Null_Generator, which is used to find closed cycles of minimum length 3.
-void Eig_minimize(vector<vector<int>>& nullEigs){
+int Eig_minimize(vector<vector<int>>& nullEigs){
+    int changes_made = 0;
     int nullsize = nullEigs.size() , noops = nullEigs[0].size(); //noops is the number of operators
 
     vector<int> nulln(nullsize);
@@ -217,7 +220,7 @@ void Eig_minimize(vector<vector<int>>& nullEigs){
                 }
             }
         }
-        nullEigs[nullEigsMinind[i]] = bestVec;
+	if(nullEigs[nullEigsMinind[i]] != bestVec){ nullEigs[nullEigsMinind[i]] = bestVec; changes_made = 1;}
     }
 
     for(int k = 0; k < nullEigsOnesind.size(); k++){
@@ -240,8 +243,9 @@ void Eig_minimize(vector<vector<int>>& nullEigs){
                 }
             }
         }
-        nullEigs[oneskind] = bestEigk;
+        if(nullEigs[oneskind] != bestEigk){ nullEigs[oneskind] = bestEigk; changes_made = 1;}
     }
+    return changes_made;
 }
 
 // This function converts the array of integers into a corresponding binary string (used to convert the indices of Z into string of bitsets)
@@ -506,6 +510,8 @@ int none(dbitset v){
     return std::all_of(v.begin(), v.end(), [](int i) { return i==0; });
 }
 
+ofstream output;
+
 void main1(int argc , char* argv[]){
     string fileName(argv[1]);  // Reading the name of the input .txt file describing the Hamiltonian
     vector<pair<complex<double>, vector<int>>> data = data_extract(fileName);
@@ -536,13 +542,13 @@ void main1(int argc , char* argv[]){
     // Minimizing the size of the fundamental cycless
     vector<vector<int>> Ps_binary = bit_to_intvec(Ps_nontrivial);
     vector<vector<int>> nullspace = Null2(Ps_binary);
-    cycle_minimize(nullspace);
+    while(cycle_minimize(nullspace));
     int no_ps = Ps_binary.size();
     int nullity = nullspace.size();
 
     //string output_h = fileName.substr(0, fileName.find_last_of(".")) + ".h";
-    string output_h = "hamiltonian.h";
-    ofstream output(output_h);
+    // string output_h = "hamiltonian.h";
+    // ofstream output(output_h);
 
     // ********************************************************************** //
     // -------------------- Creating the the .h file ------------------------ //
@@ -685,7 +691,7 @@ void main1(int argc , char* argv[]){
         }
         output << "};" << endl;
 
-        output.close();
+        // output.close();
     }
 }
 
@@ -795,7 +801,7 @@ void main2(int argc , char* argv[]){
         bool permutation_found = false;
         Ps_bin_total.push_back(Ps_binary_Op[O][k]);
         nullspace_k = Null2(Ps_bin_total);
-        Eig_minimize(nullspace_k);
+        while(Eig_minimize(nullspace_k));
         int min_ops=100000 , min_index;
         for(int i = 0; i< nullspace_k.size(); i++){
             int sum_ops = 0;
@@ -816,8 +822,8 @@ void main2(int argc , char* argv[]){
         }
     }
 
-    string output_operator = "observables.h";
-    ofstream output(output_operator);
+    // string output_operator = "observables.h";
+    // ofstream output(output_operator);
 
     vector<int> rel_perms[Nobservables];
     bool non_triv_offdiags_exists[Nobservables] = {false};
@@ -842,6 +848,7 @@ void main2(int argc , char* argv[]){
     }
 
     if(output.is_open()){
+	output << endl << endl;
 	output << "#define MEASURE_OBSERVABLES" << endl << endl;
         output << "const int Nobservables = " << Nobservables << ";" << endl;
 
@@ -1028,22 +1035,21 @@ void main2(int argc , char* argv[]){
             output << "}"; if(O<Nobservables-1) output << ",";
        }
        output << "};" << endl;
-       output.close();
+       // output.close();
     }
 }
 
 int main(int argc , char* argv[]){
     if(argc < 2){ cout << "Usage: ./prepare.bin hamiltonian.txt observable_1.txt observable_2.txt ..." << endl; exit(1);}
     cout << "Preparing PMR for the Hamiltonian and computing the list of fundamental cycles...";
+    output.open("hamiltonian.h");
     main1(argc, argv);
     cout << "done" << endl;
     if(argc >= 3){
        cout << "Preparing PMR for the observables and their representation via the permutation operators of the Hamiltonian...";
        main2(argc, argv);
        cout << "done" << endl;
-    } else{
-       std::ofstream output("observables.h");
-       output.close();
     }
+    output.close();
     return 0;
 }
