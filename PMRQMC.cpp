@@ -24,7 +24,7 @@
 
 #define measurements (steps/stepsPerMeasurement)
 
-#if defined(exhaustive_cycle_search)
+#ifdef EXHAUSTIVE_CYCLE_SEARCH
 	#define rmin 0                            // length r of sub-sequence is chosen randomly between rmin and rmax
 	#define rmax cycle_max_len
 	#define lmin r                            // cycle lengths must be between lmin and lmax
@@ -356,9 +356,7 @@ double measure_Hdiag2(){
 
 double measure_Hoffdiag(){
 	double R = 0;
-	if(q > 0)  R += (d->divdiffs[q-1]/d->divdiffs[q]).get_double() *
-			(beta_pow_factorial[q-1]/beta_pow_factorial[q]) *
-			(currD_partial[q-1]/currD) * calc_d(Sq[q-1]);
+	if(q > 0) R += (d->divdiffs[q-1]/d->divdiffs[q]).get_double()*q/(-beta);
 	return R;
 }
 
@@ -443,8 +441,8 @@ int main(int argc, char* argv[]){
 	std::cout << std::setprecision(9);
 	std::cout << "mean(sgn(W)) = " << sgn_sum << std::endl;
 	std::cout << "std.dev.(sgn(W)) = " << sqrt(over_bins_sum_sgn) << std::endl;
-	if(qmax_achieved) std::cout << "Warning: qmax = " << qmax << "was achieved" << std::endl;
-	for(i=0;i<Ncycles;i++) if(!cycles_used[i]) std::cout << "Warning: cycle No. " << i << "was not used" << std::endl;
+	if(qmax_achieved) std::cout << "Warning: qmax = " << qmax << " was achieved" << std::endl;
+	for(i=0;i<Ncycles;i++) if(!cycles_used[i]) std::cout << "Warning: cycle No. " << i << " was not used" << std::endl;
 	std::cout << "mean(q) = " << meanq / measurements << std::endl;
 	std::cout << "max(q) = "<< maxq << std::endl;
 	for(k=0;k<N_all_observables;k++) if(valid_observable[k]){

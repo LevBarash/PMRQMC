@@ -367,7 +367,7 @@ struct BitsetComparator {
     bool operator()(const dbitset& lhs, const dbitset& rhs) const {
         int i = lhs.size()-1, j = rhs.size()-1, ans = 0;
         while(i >= 0 && lhs[i] == 0) i--;
-        while(j >= 0 && rhs[i] == 0) j--;
+        while(j >= 0 && rhs[j] == 0) j--;
         if(i < j) ans = 1; else if(i == j){
             while(i >= 0 && lhs[i] == rhs[i]) i--;
             if(i >= 0 && lhs[i] < rhs[i]) ans = 1;
