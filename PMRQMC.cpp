@@ -13,13 +13,14 @@
 
 #include<iostream>
 #include<iomanip>
+#include<complex>
 #include<random>
 #include<cstdlib>
 #include<algorithm>
 #include<bitset>
-#include"divdiff.h"
-#include"hamiltonian.h" // use a header file, which defines the Hamiltonian and the custom observables
-#include"parameters.h"  // parameters of the simulation such as the number of Monte-Carlo updates
+#include"divdiff.hpp"
+#include"hamiltonian.hpp" // use a header file, which defines the Hamiltonian and the custom observables
+#include"parameters.hpp"  // parameters of the simulation such as the number of Monte-Carlo updates
 
 #define measurements (steps/stepsPerMeasurement)
 
@@ -50,7 +51,7 @@ int cycles_used[Ncycles];
 int n_cycles[Nop+3]; // numbers of cycles of lengths 0,1,2,...,Nop+2, the last three values are always zeros.
 int cycle_min_len, cycle_max_len, found_cycles, min_index, max_index;
 
-#ifndef MEASURE_OBSERVABLES
+#ifndef MEASURE_CUSTOM_OBSERVABLES
 #define Nobservables 0
 #endif
 
@@ -66,7 +67,6 @@ double bin_mean_sgn[Nbins];
 int q;
 int qmax_achieved=0;
 
-double beta = 1.0;
 divdiff* d;
 
 std::bitset<N> lattice;
@@ -82,22 +82,22 @@ double Energies_backup[qmax+1];
 int EnergyIndexes[qmax];
 int eoccupied[qmax];
 double currEnergy;
-double old_currD, currD;
-double currD_partial[qmax];
+std::complex<double> old_currD, currD;
+std::complex<double> currD_partial[qmax];
 
 ExExFloat one, currWeight;
 unsigned long long step;
 unsigned long long measurement_step;
 
 double CalcEnergy(){ // calculate the energy <z | D_0 | z> of a given configuration of spins
-	double sum = 0;
-	for(int i=0;i<D0_size;i++) sum -= (2*(int((D0_product[i] & (~lattice)).count())%2)-1) * D0_coeff[i];
-	return sum;
+	std::complex<double> sum = 0;
+	for(int i=0;i<D0_size;i++) sum -= double(2*(int((D0_product[i] & (~lattice)).count())%2)-1) * D0_coeff[i];
+	return sum.real();
 }
 
-double calc_d(int k){ // calculate d_k = <z | D_k | z> for the current configuration of spins
-	double sum = 0;
-	for(int i=0;i<D_size[k];i++) sum -= (2*(int((D_product[k][i] & (~lattice)).count())%2)-1) * D_coeff[k][i];
+std::complex<double> calc_d(int k){ // calculate d_k = <z | D_k | z> for the current configuration of spins
+	std::complex<double> sum = 0;
+	for(int i=0;i<D_size[k];i++) sum -= double(2*(int((D_product[k][i] & (~lattice)).count())%2)-1) * D_coeff[k][i];
 	return sum;
 }
 
@@ -119,7 +119,7 @@ void GetEnergies(){
 ExExFloat GetWeight(){
 	d->CurrentLength=0; GetEnergies();
 	for(int i=0;i<=q;i++) d->AddElement(-beta*Energies[i]);
-	return d->divdiffs[q] * beta_pow_factorial[q] * currD;
+	return d->divdiffs[q] * beta_pow_factorial[q] * currD.real();
 }
 
 ExExFloat UpdateWeight(){
@@ -132,19 +132,19 @@ ExExFloat UpdateWeight(){
 	}
 	if(i==0) d->CurrentLength=0; else while(n>i){ d->RemoveElement(); n--; }
 	j=0; while(i<=q){ while(eoccupied[j]) j++; d->AddElement(-beta*Energies[j++]); i++; }
-        return d->divdiffs[q] * beta_pow_factorial[q] * currD;
+        return d->divdiffs[q] * beta_pow_factorial[q] * currD.real();
 }
 
 ExExFloat UpdateWeightReplace(double removeEnergy, double addEnergy){
 	if(removeEnergy != addEnergy) if(d->RemoveValue(-beta*removeEnergy)) d->AddElement(-beta*addEnergy); else{
 		std::cout << "Error: energy not found" << std::endl; exit(1);
 	}
-	return d->divdiffs[q] * beta_pow_factorial[q] * currD; // use this value only when the values of q and currD are correct
+	return d->divdiffs[q] * beta_pow_factorial[q] * currD.real(); // use this value only when the values of q and currD are correct
 }
 
 ExExFloat UpdateWeightDel(double removeEnergy1, double removeEnergy2){
 	if(d->RemoveValue(-beta*removeEnergy1) && d->RemoveValue(-beta*removeEnergy2))
-		return d->divdiffs[q] * beta_pow_factorial[q] * currD;  // use this value only when the values of q and currD are correct
+		return d->divdiffs[q] * beta_pow_factorial[q] * currD.real();  // use this value only when the values of q and currD are correct
 	else{
 		std::cout << "Error: energy not found" << std::endl; exit(1);
 	}
@@ -152,7 +152,7 @@ ExExFloat UpdateWeightDel(double removeEnergy1, double removeEnergy2){
 
 ExExFloat UpdateWeightIns(double addEnergy1, double addEnergy2){
 	d->AddElement(-beta*addEnergy1); d->AddElement(-beta*addEnergy2);
-	return d->divdiffs[q] * beta_pow_factorial[q] * currD;    // use this value only when the values of q and currD are correct
+	return d->divdiffs[q] * beta_pow_factorial[q] * currD.real();    // use this value only when the values of q and currD are correct
 }
 
 int NoRepetitionCheck(int* sequence, int r){ // check for absence of repetitions in a sequence of length r
@@ -193,7 +193,7 @@ void init(){
 	for(i=0;i<Nop+3;i++) n_cycles[i] = 0; for(i=0;i<Ncycles;i++) n_cycles[cycle_len[i]]++;
 	for(i=0;i<N_all_observables;i++) in_bin_sum[i] = 0; in_bin_sum_sgn = 0;
 	for(i=0;i<N_all_observables;i++) valid_observable[i] = 0;
-#ifdef MEASURE_OBSERVABLES
+#ifdef MEASURE_CUSTOM_OBSERVABLES
 	for(i=0;i<Nobservables;i++) valid_observable[i] = 1;
 #endif
 #ifdef MEASURE_H
@@ -316,17 +316,17 @@ void update(){
 double meanq = 0;
 double maxq = 0;
 
-#ifdef MEASURE_OBSERVABLES
+#ifdef MEASURE_CUSTOM_OBSERVABLES
 
-double calc_MD0(int n){ // calculate <z | MD_0 | z> for the current configuration of spins and observable n
-	double sum = 0;
-	for(int i=0;i<MD0_size[n];i++) sum -= (2*(int((MD0_product[n][i] & (~lattice)).count())%2)-1) * MD0_coeff[n][i];
+std::complex<double> calc_MD0(int n){ // calculate <z | MD_0 | z> for the current configuration of spins and observable n
+	std::complex<double> sum = 0;
+	for(int i=0;i<MD0_size[n];i++) sum -= double(2*(int((MD0_product[n][i] & (~lattice)).count())%2)-1) * MD0_coeff[n][i];
 	return sum;
 }
 
-double calc_MD(int n, int k){ // calculate d_k = <z | MD_k | z> for the current configuration of spins and observable n
-	double sum = 0;
-	for(int i=0;i<MD_size[n][k];i++) sum -= (2*(int((MD_product[n][k][i] & (~lattice)).count())%2)-1) * MD_coeff[n][k][i];
+std::complex<double> calc_MD(int n, int k){ // calculate d_k = <z | MD_k | z> for the current configuration of spins and observable n
+	std::complex<double> sum = 0;
+	for(int i=0;i<MD_size[n][k];i++) sum -= double(2*(int((MD_product[n][k][i] & (~lattice)).count())%2)-1) * MD_coeff[n][k][i];
 	return sum;
 }
 
@@ -369,7 +369,7 @@ double measure_Hoffdiag2(){
 std::string name_of_observable(int n){
 	std::string s;
 	if(n < Nobservables){
-#ifdef MEASURE_OBSERVABLES
+#ifdef MEASURE_CUSTOM_OBSERVABLES
 		s = Mnames[n];
 #endif
 	} else switch(n-Nobservables){
@@ -386,16 +386,18 @@ std::string name_of_observable(int n){
 double measure_observable(int n){
 	double R = 0; int i,k,len,cont;
 	if(valid_observable[n]) if(n < Nobservables){
-#ifdef MEASURE_OBSERVABLES
-		R = calc_MD0(n);
+#ifdef MEASURE_CUSTOM_OBSERVABLES
+		std::complex<double> T = calc_MD0(n);
 		for(k=0;k<MNop[n];k++){
 			P = MP[n][k]; len = P.count(); if(len>q) continue;
 			if(!NoRepetitionCheck(Sq+(q-len),len)) continue;
 			cont = 0; for(i=0;i<len;i++) if(!P.test(Sq[q-1-i])){ cont = 1; break;} if(cont) continue;
-			R +=	(d->divdiffs[q-len]/d->divdiffs[q]).get_double() *
+			T +=	(d->divdiffs[q-len]/d->divdiffs[q]).get_double() *
 				(beta_pow_factorial[q-len]/beta_pow_factorial[q]/factorial[len]) *
 				(currD_partial[q-len]/currD) * calc_MD(n,k);
+			
 		}
+		R = (currD*T).real()/currD.real(); // we importance-sample Re(W_C A_C)/Re(W_C)
 #endif
 	} else  switch(n-Nobservables){
 			case 0:	R = measure_H(); break;
@@ -410,7 +412,7 @@ double measure_observable(int n){
 
 void measure(){
 	double R, sgn; int i;
-	GetWeight(); sgn = currWeight.sgn();
+	currWeight = GetWeight(); sgn = currWeight.sgn();
 	meanq += q; if(maxq < q) maxq = q; in_bin_sum_sgn += sgn;
 	if((measurement_step+1) % bin_length == 0){
 		in_bin_sum_sgn /= bin_length; bin_mean_sgn[measurement_step/bin_length] = in_bin_sum_sgn; in_bin_sum_sgn = 0;
@@ -431,6 +433,7 @@ int main(int argc, char* argv[]){
 	double over_bins_sum[N_all_observables] = {0}; double over_bins_sum_sgn = 0;
 	double over_bins_sum_cov[N_all_observables] = {0}; double mean[N_all_observables]; double stdev[N_all_observables];
 	int i,k,o=0; divdiff_init(); divdiff dd(q+4,500); d=&dd; init();
+	std::cout << "Parameters: beta = " << beta << ", Tsteps = " << Tsteps << ", steps = " << steps << std::endl;
 	for(step=0;step<Tsteps;step++) update();
 	for(measurement_step=0;measurement_step<measurements;measurement_step++){
 		for(step=0;step<stepsPerMeasurement;step++) update(); measure();

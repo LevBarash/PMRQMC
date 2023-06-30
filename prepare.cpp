@@ -512,6 +512,10 @@ int none(dbitset v){
 
 ofstream output;
 
+void output_complex(complex<double> z){
+    if(z.imag() == 0) output << z.real(); else output << "{" << z.real() << "," << z.imag() << "}";
+}
+
 void main1(int argc , char* argv[]){
     string fileName(argv[1]);  // Reading the name of the input .txt file describing the Hamiltonian
     vector<pair<complex<double>, vector<int>>> data = data_extract(fileName);
@@ -547,12 +551,13 @@ void main1(int argc , char* argv[]){
     int nullity = nullspace.size();
 
     //string output_h = fileName.substr(0, fileName.find_last_of(".")) + ".h";
-    // string output_h = "hamiltonian.h";
+    // string output_h = "hamiltonian.hpp";
     // ofstream output(output_h);
 
     // ********************************************************************** //
     // -------------------- Creating the the .h file ------------------------ //
     if(output.is_open()){
+        int actually_complex;
         output << "#define N        " << no_qubit << endl;
         output << "#define Nop      " << no_ps << endl;
         output << "#define Ncycles  " << nullity << endl;
@@ -591,23 +596,15 @@ void main1(int argc , char* argv[]){
         // ---------------------------------------------------------------------- //
         // -------------------------- Diagonal terms ---------------------------- //
         output << "const int D0_size = " << Z_track[0].size() << ";" << endl;
-        output << "double D0_coeff[D0_size] = {";
+
+        actually_complex = 0;
+        for(int i=0;i<Z_track[0].size();i++) if(coefficients[Z_track[0][i]].imag()!=0) actually_complex = 1;
+
+        if(actually_complex) output << "std::complex<double> "; else output << "double ";
+        output << "D0_coeff[D0_size] = {";
         for(int i=0;i<Z_track[0].size();i++){
-            complex<double> c_ij = coefficients[Z_track[0][i]];
-            if(abs(c_ij.imag()) > 1e-7 ){
-                if(c_ij.imag() < 0){
-                output << c_ij.real() << c_ij.imag() << "i";
-                }
-                else{
-                    output << c_ij.real() << "+" << c_ij.imag() << "i";
-                }
-            }
-            else{
-                output << c_ij.real();
-            }
-            if(i < Z_track[0].size() - 1){
-                output << ", "; 
-            }
+            output_complex(coefficients[Z_track[0][i]]);
+            if(i < Z_track[0].size() - 1) output << ", ";
         }
         output << "};" << endl;
         output << "std::bitset<N> D0_product[D0_size] = {";
@@ -648,25 +645,20 @@ void main1(int argc , char* argv[]){
             }
         }
         output << "};" << endl;
-        output << "double D_coeff[Nop][D_maxsize] = {";
+
+
+        actually_complex = 0;
+        for(int i = D_start; i < Z_track.size() ; i++)
+           for(int j = 0; j < Z_track[i].size(); j++)
+              if(coefficients[Z_track[i][j]].imag()!=0) actually_complex = 1;
+
+        if(actually_complex) output << "std::complex<double> "; else output << "double ";
+        output << "D_coeff[Nop][D_maxsize] = {";
         for(int i = D_start; i < Z_track.size() ; i++){
             output << "{";
             for(int j = 0; j < Z_track[i].size(); j++){
-                complex<double> c_ij = coefficients[Z_track[i][j]];
-                if(abs(c_ij.imag()) > 1e-7 ){
-                    if(c_ij.imag() < 0){
-                        output << c_ij.real() << c_ij.imag() << "i";
-                    }
-                    else{
-                        output << c_ij.real() << "+" << c_ij.imag() <<"i";
-                    }
-                }
-                else{
-                    output << c_ij.real();
-                }
-                if(j < Z_track[i].size() - 1){
-                    output << ", "; 
-                }
+                output_complex(coefficients[Z_track[i][j]]);
+                if(j < Z_track[i].size() - 1) output << ", ";
             }
             output << "}";
             if(i < Z_track.size()-1){
@@ -822,7 +814,7 @@ void main2(int argc , char* argv[]){
         }
     }
 
-    // string output_operator = "observables.h";
+    // string output_operator = "observables.hpp";
     // ofstream output(output_operator);
 
     vector<int> rel_perms[Nobservables];
@@ -848,8 +840,9 @@ void main2(int argc , char* argv[]){
     }
 
     if(output.is_open()){
+        int actually_complex;
 	output << endl << endl;
-	output << "#define MEASURE_OBSERVABLES" << endl << endl;
+	output << "#define MEASURE_CUSTOM_OBSERVABLES" << endl << endl;
         output << "const int Nobservables = " << Nobservables << ";" << endl;
 
         int no_ops_max = 0; for(int O=0; O<Nobservables; O++) no_ops_max = max(no_ops_max, no_ops[O]);
@@ -894,37 +887,19 @@ void main2(int argc , char* argv[]){
 
         PrintList(output, MD0_size, Nobservables, "int MD0_size[Nobservables]");
 
-        output << "double MD0_coeff[Nobservables][MD0_maxsize] = {";
+        actually_complex = 0;
+        for(int O=0; O<Nobservables; O++)
+           if(P0_exists[O]) for(int i=0;i<Z_track_Op[O][0].size();i++)
+              if(coefficients_Op[O][Z_track_Op[O][0][i]].imag()!=0) actually_complex = 1;
+
+        if(actually_complex) output << "std::complex<double> "; else output << "double ";
+        output << "MD0_coeff[Nobservables][MD0_maxsize] = {";
 
         for(int O=0; O<Nobservables; O++){
             output << "{";
             if(P0_exists[O]) for(int i=0;i<Z_track_Op[O][0].size();i++){
-                complex<double> c_ij = coefficients_Op[O][Z_track_Op[O][0][i]];
-                if(abs(c_ij.real()) > 1e-7){
-                    if(abs(c_ij.imag()) > 1e-7 ){
-                        if(c_ij.imag() < 0){
-                        output << c_ij.real() << c_ij.imag() << "i";
-                        }
-                        else{
-                            output << c_ij.real() << "+" << c_ij.imag() << "i";
-                        }
-                    }
-                    else{
-                        output << c_ij.real();
-                    }
-                }else{
-                    if(abs(c_ij.imag()) > 1e-7 ){
-                        if(c_ij.imag() < 0){
-                        output << c_ij.imag() << "i";
-                        }
-                        else{
-                            output  << c_ij.imag() << "i";
-                        }
-                    }
-                }
-                if(i < Z_track_Op[O][0].size() - 1){
-                    output << ", "; 
-                }
+                output_complex(coefficients_Op[O][Z_track_Op[O][0][i]]);
+                if(i < Z_track_Op[O][0].size() - 1) output << ", ";
             }
             output << "}"; if(O<Nobservables-1) output << ",";
         }
@@ -971,7 +946,16 @@ void main2(int argc , char* argv[]){
        for(int O=0; O<Nobservables; O++){ PrintListPure(output, MD_size[O], no_ops[O]); if(O<Nobservables-1) output<<", ";}
        output << "};" << endl;
 
-       output << "double MD_coeff[Nobservables][MNop_max][MD_Maxsize] = {";
+       actually_complex = 0;
+       for(int O=0; O<Nobservables; O++)
+          if(non_triv_offdiags_exists[O]){
+             for(int i = 0; i < no_ops[O]; i++)
+                for(int j = 0; j < Z_track_Op_kept[O][i].size(); j++)
+                   if(coefficients_Op[O][Z_track_Op_kept[O][i][j]].imag()!=0) actually_complex = 1;
+          }
+
+       if(actually_complex) output << "std::complex<double> "; else output << "double ";
+       output << "MD_coeff[Nobservables][MNop_max][MD_Maxsize] = {";
 
        for(int O=0; O<Nobservables; O++){
          output << "{";
@@ -979,32 +963,8 @@ void main2(int argc , char* argv[]){
             for(int i = 0; i < no_ops[O]; i++){
                 output << "{";
                 for(int j = 0; j < Z_track_Op_kept[O][i].size(); j++){
-                    complex<double> c_ij = coefficients_Op[O][Z_track_Op_kept[O][i][j]];
-                    if(abs(c_ij.real()) > 1e-7){
-                        if(abs(c_ij.imag()) > 1e-7 ){
-                            if(c_ij.imag() < 0){
-                            output << c_ij.real() << c_ij.imag() << "i";
-                            }
-                            else{
-                                output << c_ij.real() << "+" << c_ij.imag() << "i";
-                            }
-                        }
-                        else{
-                            output << c_ij.real();
-                        }
-                    }else{
-                        if(abs(c_ij.imag()) > 1e-7 ){
-                            if(c_ij.imag() < 0){
-                            output << c_ij.imag() << "i";
-                            }
-                            else{
-                                output  << c_ij.imag() << "i";
-                            }
-                        }
-                    }
-                    if(j < Z_track_Op_kept[O][i].size() - 1){
-                        output << ", "; 
-                    }
+                    output_complex(coefficients_Op[O][Z_track_Op_kept[O][i][j]]);
+                    if(j < Z_track_Op_kept[O][i].size() - 1) output << ", ";
                 }
                 output << "}";
                 if(i < no_ops[O]-1){
@@ -1042,7 +1002,7 @@ void main2(int argc , char* argv[]){
 int main(int argc , char* argv[]){
     if(argc < 2){ cout << "Usage: ./prepare.bin hamiltonian.txt observable_1.txt observable_2.txt ..." << endl; exit(1);}
     cout << "Preparing PMR for the Hamiltonian and computing the list of fundamental cycles...";
-    output.open("hamiltonian.h");
+    output.open("hamiltonian.hpp");
     main1(argc, argv);
     cout << "done" << endl;
     if(argc >= 3){

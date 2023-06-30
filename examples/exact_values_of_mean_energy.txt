@@ -15,7 +15,7 @@ H_neg_triangle2: -10.523
 
 H_tfim4: -6.606335
 
-H_triangular_XXZZ: -5.99086
+H_triangular_ZZ+XX_L=3: -5.99086
 
 H_ZZ-XX_plaq: -5.07019
 
