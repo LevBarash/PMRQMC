@@ -52,8 +52,9 @@ vector<int> GF2_add(vector<int> vec1 , vector<int> vec2){
 
 // Function to compute the mod 2 nullspace
 vector<vector<int>> Null2(const vector<vector<int>>& matrix) {
-    int numRows = matrix.size();
-    int numCols = matrix[0].size();
+    vector<vector<int>> nullspaceBasis;
+    int numRows = matrix.size(); int numCols;    
+    if(numRows==0) return nullspaceBasis; else numCols = matrix[0].size();
     vector<vector<int>> matrix_RE = matrix; // Copy the original matrix
     vector<int> nullspaceVector(numCols, 0);
     vector<int> marked_rows;
@@ -90,7 +91,6 @@ vector<vector<int>> Null2(const vector<vector<int>>& matrix) {
         marked_matrix.push_back(matrix_RE[marked_rows[i]]);
     }
 
-    vector<vector<int>> nullspaceBasis;
     for(int i = 0; i < numRows; i++){
         auto iter = find(marked_rows.begin(), marked_rows.end(), i); 
         if(iter == marked_rows.end()){ // Finding unmarked (independent) rows

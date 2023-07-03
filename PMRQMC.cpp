@@ -40,7 +40,11 @@ static std::random_device rd;
 static std::mt19937 rng;
 static std::uniform_int_distribution<> dice2(0,1);
 static std::uniform_int_distribution<> diceN(0,N-1);
+#if Nop>0
 static std::uniform_int_distribution<> diceNop(0,Nop-1);
+#else
+static std::uniform_int_distribution<> diceNop(0,0);
+#endif
 static std::uniform_real_distribution<> val(0.0,1.0);
 static std::geometric_distribution<> geometric_int(0.8);
 
@@ -241,7 +245,7 @@ void update(){
 					memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
 					for(i=m;i<q-2;i++) Sq[i] = Sq[i+2]; q-=2;
 					GetEnergies(); newWeight = UpdateWeightDel(oldE,oldE2);
-					if(val(rng) < Metropolis(newWeight)/Nop) currWeight = newWeight; else{
+					if(val(rng) < Metropolis(newWeight)/(Nop>0 ? Nop : 1)) currWeight = newWeight; else{
 						q+=2; memcpy(Sq,Sq_backup,q*sizeof(int)); memcpy(Energies,Energies_backup,(q+1)*sizeof(double));
 						currD = old_currD; UpdateWeightIns(oldE,oldE2);
 					}
