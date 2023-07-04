@@ -683,6 +683,8 @@ void main1(int argc , char* argv[]){
         }
         output << "};" << endl;
 
+	if(no_ps == 0) output << endl << "#pragma GCC diagnostic ignored \"-Wdiv-by-zero\"" << endl;
+
         // output.close();
     }
 }
