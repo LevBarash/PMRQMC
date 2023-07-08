@@ -44,7 +44,7 @@ static std::uniform_int_distribution<> diceNop(0,Nop-1);
 static std::uniform_real_distribution<> val(0.0,1.0);
 static std::geometric_distribution<> geometric_int(0.8);
 
-double beta_pow_factorial[qmax]; // contains the values (-beta)^q / q!
+ExExFloat beta_pow_factorial[qmax]; // contains the values (-beta)^q / q!
 double factorial[qmax]; // contains the values q!
 int cycle_len[Ncycles];
 int cycles_used[Ncycles];
@@ -181,7 +181,7 @@ int FindCycles(int r){  // find all cycles of length between lmin and lmax, each
 }
 
 void init(){
-	int i,j,k,l; double curr1=1, curr2=1; factorial[0] = beta_pow_factorial[0] = 1;
+	int i,j,k,l; double curr2=1; ExExFloat curr1; beta_pow_factorial[0] = curr1; factorial[0] = curr2;
 	for(q=1;q<qmax;q++){ curr1*=(-beta)/q; curr2*=q; beta_pow_factorial[q] = curr1; factorial[q] = curr2;}
 	unsigned int rng_seed = rd(); rng.seed(rng_seed); std::cout << "RNG seed = " << rng_seed << std::endl;
 	lattice = 0; for(i=N-1;i>=0;i--) if(dice2(rng)) lattice.set(i); z = lattice; q=0;
@@ -393,9 +393,8 @@ double measure_observable(int n){
 			if(!NoRepetitionCheck(Sq+(q-len),len)) continue;
 			cont = 0; for(i=0;i<len;i++) if(!P.test(Sq[q-1-i])){ cont = 1; break;} if(cont) continue;
 			T +=	(d->divdiffs[q-len]/d->divdiffs[q]).get_double() *
-				(beta_pow_factorial[q-len]/beta_pow_factorial[q]/factorial[len]) *
+			        (beta_pow_factorial[q-len]/beta_pow_factorial[q]).get_double()/factorial[len] *
 				(currD_partial[q-len]/currD) * calc_MD(n,k);
-			
 		}
 		R = (currD*T).real()/currD.real(); // we importance-sample Re(W_C A_C)/Re(W_C)
 #endif
