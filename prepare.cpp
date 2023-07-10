@@ -860,7 +860,6 @@ void main2(int argc , char* argv[]){
         output << "std::bitset<Nop> MP[Nobservables][MNop_max] = {";
 
         for(int O=0; O<Nobservables; O++){
-           if(rel_perms[O].size() > 0){
                output << "{";
                non_triv_offdiags_exists[O] = true;
                for(int i = 0; i < no_ops[O]; i++){
@@ -875,10 +874,6 @@ void main2(int argc , char* argv[]){
                }
                output << "}";
                if(O<Nobservables-1) output << ",";
-           }else{
-               output << endl << "Error: no relevant permutation operators. The expectation value of this operator is zero." << endl;
-               exit(1);
-           }
         }
 	output << "};" << endl << endl;
 
