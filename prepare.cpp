@@ -380,8 +380,10 @@ PZdata PZcomp(const vector<pair<complex<double>,vector<int>>>& data) {
             // Format of the input file: The 2nd, 4th, 6th, ... indicate the paulis
             int pauli_j = data_i[2 * j + 1];
 
-            if (qubit > no_qubit)
-                no_qubit = qubit;
+            if (qubit <= 0){
+                cout << "Error: " << qubit << " is incorrect spin index. Spin indices must be positive integers." << endl; exit(1);
+            }
+            if (qubit > no_qubit) no_qubit = qubit;
             if (pauli_j == 1) {
 		if(qubit > bit_num.size()) bit_num.resize(qubit);
                 bit_num[qubit-1] = 1;
