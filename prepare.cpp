@@ -228,7 +228,9 @@ string int_to_str(vector<int> Z){
     int count = 1, ind_z_count = 0, max_z = Z[Z_size-1];
 
     while(ind_z_count < Z_size){
-        if(Z[ind_z_count] == count){
+	if(Z[ind_z_count] < count){
+		cout << endl << "Error: repeating spin indices are detected in a Pauli string" << endl; exit(1);
+	} else if(Z[ind_z_count] == count){
             Z_string = "1" + Z_string;
             ind_z_count++;
         }
@@ -381,7 +383,7 @@ PZdata PZcomp(const vector<pair<complex<double>,vector<int>>>& data) {
             int pauli_j = data_i[2 * j + 1];
 
             if (qubit <= 0){
-                cout << "Error: " << qubit << " is incorrect spin index. Spin indices must be positive integers." << endl; exit(1);
+                cout << endl << "Error: " << qubit << " is incorrect spin index. Spin indices must be positive integers." << endl; exit(1);
             }
             if (qubit > no_qubit) no_qubit = qubit;
             if (pauli_j == 1) {
