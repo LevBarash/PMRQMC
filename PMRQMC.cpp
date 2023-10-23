@@ -55,7 +55,7 @@ int cycle_min_len, cycle_max_len, found_cycles, min_index, max_index;
 #define Nobservables 0
 #endif
 
-const int N_all_observables = Nobservables + 6;
+const int N_all_observables = Nobservables + 7;
 int valid_observable[N_all_observables];
 
 int bin_length = measurements / Nbins;
@@ -214,6 +214,9 @@ void init(){
 #ifdef MEASURE_HOFFDIAG2
 	valid_observable[Nobservables + 5] = 1;
 #endif
+#ifdef MEASURE_Z_MAGNETIZATION
+	valid_observable[Nobservables + 6] = 1;
+#endif
 }
 
 double Metropolis(ExExFloat newWeight){
@@ -366,6 +369,10 @@ double measure_Hoffdiag2(){
 	return R;
 }
 
+double measure_Z_magnetization(){
+	return (2.0*lattice.count() - N)/N;
+}
+
 std::string name_of_observable(int n){
 	std::string s;
 	if(n < Nobservables){
@@ -379,6 +386,7 @@ std::string name_of_observable(int n){
 			case 3: s = "H_{diag}^2";    break;
 			case 4: s = "H_{offdiag}";   break;
 			case 5: s = "H_{offdiag}^2"; break;
+			case 6: s = "Z_magnetization"; break;
 	}
 	return s;
 }
@@ -405,6 +413,7 @@ double measure_observable(int n){
 			case 3:	R = measure_Hdiag2(); break;
 			case 4:	R = measure_Hoffdiag(); break;
 			case 5:	R = measure_Hoffdiag2(); break;
+			case 6: R = measure_Z_magnetization(); break;
 	}
 	return R;
 }
@@ -427,6 +436,10 @@ void measure(){
 double get_cpu_time(){ return (double)clock() / CLOCKS_PER_SEC;}
 
 int main(int argc, char* argv[]){
+	if(steps < Nbins*stepsPerMeasurement){
+		std::cout<<"Error: steps cannot be smaller than Nbins*stepsPerMeasurement."<<std::endl;
+		exit(1);
+	}
 	double start_time = get_cpu_time();
 	double Rsum[N_all_observables] = {0}; double sgn_sum = 0;
 	double over_bins_sum[N_all_observables] = {0}; double over_bins_sum_sgn = 0;

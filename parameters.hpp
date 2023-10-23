@@ -12,7 +12,7 @@
 
 #define Tsteps 1000000               // number of Monte-Carlo initial equilibration updates
 #define steps  10000000              // number of Monte-Carlo updates
-#define stepsPerMeasurement 100      // number of Monte-Carlo updates per measurement
+#define stepsPerMeasurement 10       // number of Monte-Carlo updates per measurement
 #define beta   1.0                   // inverse temperature
 
 //
@@ -25,6 +25,7 @@
 #define MEASURE_HDIAG2               // <H_{diag}^2>    is measured when this line is not commented
 #define MEASURE_HOFFDIAG             // <H_{offdiag}>   is measured when this line is not commented
 #define MEASURE_HOFFDIAG2            // <H_{offdiag}^2> is measured when this line is not commented
+// #define MEASURE_Z_MAGNETIZATION      // Z-magnetization is measured when this line is not commented
 
 //
 // Below are the implementation parameters:

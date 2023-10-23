@@ -486,7 +486,7 @@ int none(dbitset v){
 ofstream output;
 
 void output_complex(complex<double> z){
-    if(z.imag() == 0) output << z.real(); else output << "{" << z.real() << "," << z.imag() << "}";
+    if(abs(z.imag()) < 1E-8) output << z.real(); else output << "{" << z.real() << "," << z.imag() << "}";
 }
 
 void main1(int argc , char* argv[]){
@@ -568,27 +568,35 @@ void main1(int argc , char* argv[]){
 
         // ---------------------------------------------------------------------- //
         // -------------------------- Diagonal terms ---------------------------- //
-        output << "const int D0_size = " << Z_track[0].size() << ";" << endl;
+	if(D0_exists){
+	        output << "const int D0_size = " << Z_track[0].size() << ";" << endl;
 
-        actually_complex = 0;
-        for(int i=0;i<Z_track[0].size();i++) if(coefficients[Z_track[0][i]].imag()!=0) actually_complex = 1;
+	        actually_complex = 0;
+        	for(int i=0;i<Z_track[0].size();i++) if(coefficients[Z_track[0][i]].imag()!=0) actually_complex = 1;
 
-        if(actually_complex) output << "std::complex<double> "; else output << "double ";
-        output << "D0_coeff[D0_size] = {";
-        for(int i=0;i<Z_track[0].size();i++){
-            output_complex(coefficients[Z_track[0][i]]);
-            if(i < Z_track[0].size() - 1) output << ", ";
-        }
-        output << "};" << endl;
-        output << "std::bitset<N> D0_product[D0_size] = {";
-        for(int i = 0; i < Z_track[0].size(); i++){
-            vector<int> Zs_i = Zs[Z_track[0][i]];
-            output << "std::bitset<N>(\"" << int_to_str(Zs_i) << "\")";
-            if(i < Z_track[0].size() - 1){
-                output << ", ";
-            }
-        }
-        output << "};" << endl;
+	        if(actually_complex) output << "std::complex<double> "; else output << "double ";
+        	output << "D0_coeff[D0_size] = {";
+	        for(int i=0;i<Z_track[0].size();i++){
+	            output_complex(coefficients[Z_track[0][i]]);
+        	    if(i < Z_track[0].size() - 1) output << ", ";
+	        }
+	        output << "};" << endl;
+        	output << "std::bitset<N> D0_product[D0_size] = {";
+	        for(int i = 0; i < Z_track[0].size(); i++){
+        	    vector<int> Zs_i = Zs[Z_track[0][i]];
+	            output << "std::bitset<N>(\"" << int_to_str(Zs_i) << "\")";
+        	    if(i < Z_track[0].size() - 1){
+                	output << ", ";
+	            }
+        	}
+	        output << "};" << endl;
+	}
+        else{
+		output << "const int D0_size = 0;" << endl;
+		output << "double D0_coeff[D0_size];" << endl;
+		output << "std::bitset<N> D0_product[D0_size];" << endl;
+	}
+
         output << endl; 
 
         // ------------------------------------------------------------------------ //
@@ -663,7 +671,7 @@ void main1(int argc , char* argv[]){
 }
 
 template<typename T>
-void PrintListPure(ofstream& output, T* list, int len){
+void PrintListPure(ofstream& output, vector<T> list, int len){
 	output << "{";
 	for(int i=0;i<len;i++){
 		output << list[i];
@@ -673,7 +681,7 @@ void PrintListPure(ofstream& output, T* list, int len){
 }
 
 template<typename T>
-void PrintList(ofstream& output, T* list, int len, string namelist){
+void PrintList(ofstream& output, vector<T> list, int len, string namelist){
 	output << namelist << " = ";
         PrintListPure(output, list, len);
 	output << ";" << endl;
@@ -681,12 +689,12 @@ void PrintList(ofstream& output, T* list, int len, string namelist){
 
 void main2(int argc , char* argv[]){
     int Nobservables = argc - 2;
-    vector<pair<complex<double>, vector<int>>> Op_data[Nobservables];
+    vector<vector<pair<complex<double>, vector<int>>>> Op_data(Nobservables);
 
     string Ham_fileName(argv[1]);  // Reading the name of the input .txt file describing the Hamiltonian
     vector<pair<complex<double>, vector<int>>> Ham_data = data_extract(Ham_fileName);
 
-    string Op_fileNames[Nobservables];
+    vector<string> Op_fileNames(Nobservables);
     for(int O=0;O<Nobservables;O++){
         Op_fileNames[O] = argv[O+2];  // Reading the name of the input .txt file describing the Hamiltonian
         Op_data[O] = data_extract(Op_fileNames[O]);
@@ -702,15 +710,15 @@ void main2(int argc , char* argv[]){
     vector<string> Zs_string_Ham;
 
     // Unpacking the Operator data from the input files
-    PZdata PZ_data_Op[Nobservables];
-    vector<dbitset> Ps_bit_Op[Nobservables];
-    vector<vector<bool>> Ps_Op[Nobservables];
-    vector<complex<double>> coefficients_Op[Nobservables];
-    vector<vector<int>> Z_track_Op[Nobservables];
-    vector<vector<int>> Zs_Op[Nobservables];
-    vector<string> Zs_string_Op[Nobservables];
+    vector<PZdata> PZ_data_Op(Nobservables);
+    vector<vector<dbitset>> Ps_bit_Op(Nobservables);
+    vector<vector<vector<bool>>> Ps_Op(Nobservables);
+    vector<vector<complex<double>>> coefficients_Op(Nobservables);
+    vector<vector<vector<int>>> Z_track_Op(Nobservables);
+    vector<vector<vector<int>>> Zs_Op(Nobservables);
+    vector<vector<string>> Zs_string_Op(Nobservables);
     bool D0_exists = false;
-    bool P0_exists[Nobservables] = {false};
+    vector<bool> P0_exists; P0_exists.resize(Nobservables, false);
 
     for(int O=0;O<Nobservables;O++){
         PZ_data_Op[O] = PZcomp(Op_data[O]);
@@ -739,7 +747,7 @@ void main2(int argc , char* argv[]){
     }
 
     // Convert Ps indices into vector of bools
-    vector<vector<bool>> Ps_Op_nontrivial[Nobservables];
+    vector<vector<vector<bool>>> Ps_Op_nontrivial(Nobservables);
     for(int O=0;O<Nobservables;O++){
        Ps_Op_nontrivial[O]= Ps_Op[O];
        if(none(Ps_bit_Op[O][0])){
@@ -749,15 +757,15 @@ void main2(int argc , char* argv[]){
     }
 
     vector<vector<int>> Ps_binary_Ham = bit_to_intvec(Ps_Ham_nontrivial);
-    vector<vector<int>> Ps_binary_Op[Nobservables];
+    vector<vector<vector<int>>> Ps_binary_Op(Nobservables);
     for(int O=0;O<Nobservables;O++) Ps_binary_Op[O] = bit_to_intvec(Ps_Op_nontrivial[O]);
 
     // Combine the permutations of Hamiltonians with each permutation from the operator and compute the nullspace
     int no_ps = Ps_Ham_nontrivial.size();
-    int no_ops[Nobservables];
+    vector<int> no_ops(Nobservables);
     for(int O=0;O<Nobservables;O++) no_ops[O] = Ps_Op_nontrivial[O].size();
 
-    vector<vector<int>> Op_to_Ham[Nobservables];
+    vector<vector<vector<int>>> Op_to_Ham(Nobservables);
     vector<int> zero_vector;
     for(int i = 0; i < no_ps; i++){
         zero_vector.push_back(0);
@@ -792,8 +800,8 @@ void main2(int argc , char* argv[]){
     // string output_operator = "observables.hpp";
     // ofstream output(output_operator);
 
-    vector<int> rel_perms[Nobservables];
-    bool non_triv_offdiags_exists[Nobservables] = {false};
+    vector<vector<int>> rel_perms(Nobservables);
+    vector<bool> non_triv_offdiags_exists; non_triv_offdiags_exists.resize(Nobservables,false);
 
     for(int O=0;O<Nobservables;O++) for(int i = 0; i < no_ops[O]; i++){
         if(Int_sum(Op_to_Ham[O][i]) > 0){
@@ -801,23 +809,28 @@ void main2(int argc , char* argv[]){
         }
     }
     // Delete the Z_tracks of the trivial permutations:
-    vector<vector<int>> Z_track_Op_kept[Nobservables];
+    vector<vector<vector<int>>> Z_track_Op_kept(Nobservables);
 
     for(int O=0;O<Nobservables;O++){
        int counter = 0;
        for(int i = 0 ; i < no_ops[O]; i++){
-           if(rel_perms[O][counter] == i){
-               Z_track_Op_kept[O].push_back(Z_track_Op[O][i + int(P0_exists[O])]);
-               counter++;
-           }
+            // This condition checks if there are permutations in the observables file that are not in the Hamiltonian!
+            if(rel_perms[O].size() < counter + 1){
+                cerr << endl << "Error! The input Observable cannot be written in terms of the Permutation operators of the Hamiltonian." << endl;
+                exit(1);
+            }
+            if(rel_perms[O][counter] == i){
+                Z_track_Op_kept[O].push_back(Z_track_Op[O][i + int(P0_exists[O])]);
+                counter++;
+            }
        }
        no_ops[O] = rel_perms[O].size();
     }
 
     if(output.is_open()){
         int actually_complex;
-	output << endl << endl;
-	output << "#define MEASURE_CUSTOM_OBSERVABLES" << endl << endl;
+        output << endl << endl;
+        output << "#define MEASURE_CUSTOM_OBSERVABLES" << endl << endl;
         output << "const int Nobservables = " << Nobservables << ";" << endl;
 
         int no_ops_max = 0; for(int O=0; O<Nobservables; O++) no_ops_max = max(no_ops_max, no_ops[O]);
@@ -848,9 +861,9 @@ void main2(int argc , char* argv[]){
                output << "}";
                if(O<Nobservables-1) output << ",";
         }
-	output << "};" << endl << endl;
+        output << "};" << endl << endl;
 
-        int MD0_size[Nobservables]; for(int O=0; O<Nobservables; O++) MD0_size[O] = Z_track_Op[O][0].size();
+        vector<int> MD0_size(Nobservables); for(int O=0; O<Nobservables; O++) MD0_size[O] = P0_exists[O] ? Z_track_Op[O][0].size() : 0;
         int MD0_maxsize = 0; for(int O=0; O<Nobservables; O++) MD0_maxsize = max(MD0_maxsize, MD0_size[O]);
 
         output << "const int MD0_maxsize = " << MD0_maxsize << ";" << endl;
@@ -859,8 +872,8 @@ void main2(int argc , char* argv[]){
 
         actually_complex = 0;
         for(int O=0; O<Nobservables; O++)
-           if(P0_exists[O]) for(int i=0;i<Z_track_Op[O][0].size();i++)
-              if(coefficients_Op[O][Z_track_Op[O][0][i]].imag()!=0) actually_complex = 1;
+            if(P0_exists[O]) for(int i=0;i<Z_track_Op[O][0].size();i++)
+                if(coefficients_Op[O][Z_track_Op[O][0][i]].imag()!=0) actually_complex = 1;
 
         if(actually_complex) output << "std::complex<double> "; else output << "double ";
         output << "MD0_coeff[Nobservables][MD0_maxsize] = {";
@@ -873,11 +886,11 @@ void main2(int argc , char* argv[]){
             }
             output << "}"; if(O<Nobservables-1) output << ",";
         }
-       output << "};" << endl;
+        output << "};" << endl;
 
-       output << "std::bitset<N> MD0_product[Nobservables][MD0_maxsize] = {";
+        output << "std::bitset<N> MD0_product[Nobservables][MD0_maxsize] = {";
 
-       for(int O=0; O<Nobservables; O++){
+        for(int O=0; O<Nobservables; O++){
             output << "{";
             if(P0_exists[O]) for(int i = 0; i < Z_track_Op[O][0].size(); i++){
                 output << "std::bitset<N>(\"" << Zs_string_Op[O][Z_track_Op[O][0][i]] << "\")";
@@ -886,11 +899,11 @@ void main2(int argc , char* argv[]){
                 }
             }
             output << "}"; if(O<Nobservables-1) output << ",";
-       }
-       output << "};" << endl << endl;
+        }
+        output << "};" << endl << endl;
 
-       int MD_size[Nobservables][no_ops_max];
-       int MD_maxsize[Nobservables] = {0};
+        vector<vector<int>> MD_size; MD_size.resize(Nobservables,vector<int>(no_ops_max));
+        vector<int> MD_maxsize; MD_maxsize.resize(Nobservables,0);
 
        for(int O=0; O<Nobservables; O++) if(non_triv_offdiags_exists[O]){
             int D_max = 0;
