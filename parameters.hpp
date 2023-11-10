@@ -31,6 +31,6 @@
 // Below are the implementation parameters:
 //
 
-#define qmax     300                 // upper bound for the maximal length of the sequence of permutation operators
+#define qmax     1000                // upper bound for the maximal length of the sequence of permutation operators
 #define Nbins    250                 // number of bins for the error estimation via binning analysis
 #define EXHAUSTIVE_CYCLE_SEARCH      // comment this line for a more restrictive cycle search

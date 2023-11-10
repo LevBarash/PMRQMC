@@ -204,7 +204,7 @@ void FreeMem(){
 }
 
 void PrintList(ExExFloat* list, int len, const char* namelist){
-	int i,flag=1;
+	int i;
 	printf("%s={",namelist);
 	for(i=0;i<len;i++){
 		list[i].print();
@@ -214,7 +214,7 @@ void PrintList(ExExFloat* list, int len, const char* namelist){
 }
 
 void PrintList(double* list, int len, const char* namelist){
-	int i,flag=1;
+	int i;
 	printf("%s={",namelist);
 	for(i=0;i<len;i++){
 		printf("%.17g",list[i]);
@@ -224,7 +224,7 @@ void PrintList(double* list, int len, const char* namelist){
 }
 
 void PrintList(int* list, int len, const char* namelist){
-	int i,flag=1;
+	int i;
 	printf("%s={",namelist);
 	for(i=0;i<len;i++){
 		printf("%d",list[i]);
@@ -241,7 +241,7 @@ int s_changed(){
 }
 
 void AddElement(double znew, int force_s = 0, double force_mu = 0){
-	int j,k,n,l,N; ExExFloat curr; n = CurrentLength; l = n + 1; N = maxlen+extralen; z[n] = znew; CurrentLength++;
+	int j,k,n,N; ExExFloat curr; n = CurrentLength; N = maxlen+extralen; z[n] = znew; CurrentLength++;
 	if(CurrentLength==1){
 		s = (force_s == 0) ? 1 : force_s;
 		mu = (force_mu == 0) ? z[0] : force_mu;
