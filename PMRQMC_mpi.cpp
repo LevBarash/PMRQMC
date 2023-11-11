@@ -15,7 +15,6 @@
 #include<fstream>
 #include<mpi.h>
 
-std::ofstream output;
 double start_time, elapsed_time;
 
 void compute(){
@@ -35,24 +34,24 @@ void printout(){
 	double over_bins_sum_cov[N_all_observables] = {0}; double mean[N_all_observables]; double stdev[N_all_observables];
 	for(i=0;i<Nbins;i++) sgn_sum += bin_mean_sgn[i]; sgn_sum /= Nbins;
 	for(i=0;i<Nbins;i++) over_bins_sum_sgn += (bin_mean_sgn[i] - sgn_sum)*(bin_mean_sgn[i] - sgn_sum); over_bins_sum_sgn /= (Nbins*(Nbins-1));
-	output << std::setprecision(9);
-	output << "mean(sgn(W)) = " << sgn_sum << std::endl;
-	output << "std.dev.(sgn(W)) = " << sqrt(over_bins_sum_sgn) << std::endl;
-	if(qmax_achieved) output << std::endl << "Warning: qmax = " << qmax << " was achieved. The results may be incorrect. The qmax parameter should be increased." << std::endl;
-	for(i=0;i<Ncycles;i++) if(!cycles_used[i]) output << "Warning: cycle No. " << i << " of length " << cycle_len[i] << " was not used" << std::endl;
-	output << "mean(q) = " << meanq << std::endl;
-	output << "max(q) = "<< maxq << std::endl;
+	std::cout << std::setprecision(9);
+	std::cout << "mean(sgn(W)) = " << sgn_sum << std::endl;
+	std::cout << "std.dev.(sgn(W)) = " << sqrt(over_bins_sum_sgn) << std::endl;
+	if(qmax_achieved) std::cout << std::endl << "Warning: qmax = " << qmax << " was achieved. The results may be incorrect. The qmax parameter should be increased." << std::endl;
+	for(i=0;i<Ncycles;i++) if(!cycles_used[i]) std::cout << "Warning: cycle No. " << i << " of length " << cycle_len[i] << " was not used" << std::endl;
+	std::cout << "mean(q) = " << meanq << std::endl;
+	std::cout << "max(q) = "<< maxq << std::endl;
 	for(k=0;k<N_all_observables;k++) if(valid_observable[k]){
-		output << "Observable #" << ++o << ": "<< name_of_observable(k) << std::endl;
+		std::cout << "Observable #" << ++o << ": "<< name_of_observable(k) << std::endl;
 		for(i=0;i<Nbins;i++) Rsum[k] += bin_mean[k][i]; Rsum[k] /= Nbins;
 		for(i=0;i<Nbins;i++) over_bins_sum[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean[k][i] - Rsum[k]); over_bins_sum[k] /= (Nbins*(Nbins-1));
 		for(i=0;i<Nbins;i++) over_bins_sum_cov[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean_sgn[i] - sgn_sum); over_bins_sum_cov[k] /= (Nbins*(Nbins-1));
 		mean[k] = Rsum[k]/sgn_sum*(1 + over_bins_sum_sgn/sgn_sum/sgn_sum) - over_bins_sum_cov[k]/sgn_sum/sgn_sum;
 		stdev[k] = fabs(Rsum[k]/sgn_sum)*sqrt(over_bins_sum[k]/Rsum[k]/Rsum[k] + over_bins_sum_sgn/sgn_sum/sgn_sum - 2*over_bins_sum_cov[k]/Rsum[k]/sgn_sum);
-		output << "mean(O) = " << mean[k] << std::endl;
-		output << "std.dev.(O) = " << stdev[k] << std::endl;
+		std::cout << "mean(O) = " << mean[k] << std::endl;
+		std::cout << "std.dev.(O) = " << stdev[k] << std::endl;
 	}
-	output << "Elapsed cpu time = " << elapsed_time << " seconds" << std::endl;
+	std::cout << "Elapsed cpu time = " << elapsed_time << " seconds" << std::endl;
 }
 
 
@@ -72,63 +71,58 @@ int main(int argc, char* argv[]){
 		std::cout << "Error: steps cannot be smaller than Nbins*stepsPerMeasurement." << std::endl;
 		exit(1);
 	}
-	std::cout << "Starting calculation for MPI process No. " << mpi_rank << ".\n"; fflush(stdout);
+	std::cout << "Starting calculation for MPI process No. " << mpi_rank << std::endl; fflush(stdout);
 	compute();
 	std::cout << "Calculation completed for MPI process No. " << mpi_rank
-	          << ", elapsed time = " << elapsed_time << " seconds, RNG seed = " << rng_seed << ".\n"; fflush(stdout);
+	          << ", elapsed time = " << elapsed_time << " seconds, RNG seed = " << rng_seed << std::endl; fflush(stdout);
+	MPI_Barrier(MPI_COMM_WORLD);
 	if(mpi_rank == 0){
-		char fname[300],binname[300];
-		strcpy(binname,argv[0]);
-		if(strlen(binname) >= 4 && strcmp(binname+strlen(binname)-4,".bin") == 0) binname[strlen(binname)-4] = 0;
-		sprintf(fname,"%s.out",binname);
-		std::cout << "Calculation results will be written into the output file: " << fname << std::endl;
-		output.open(fname);
-		output << "Parameters: beta = " << beta << ", Tsteps = " << Tsteps << ", steps = " << steps << std::endl << std::endl;
-		output << "Number of MPI processes: " << mpi_size << std::endl;
-		output << std::endl << "Output of the MPI process No. 0:" << std::endl;
+		std::cout << std::endl;
+		std::cout << "Parameters: beta = " << beta << ", Tsteps = " << Tsteps << ", steps = " << steps << std::endl << std::endl;
+		std::cout << "Number of MPI processes: " << mpi_size << std::endl;
+		std::cout << std::endl << "Output of the MPI process No. 0:" << std::endl;
 		printout();
-		output << std::endl;
+		std::cout << std::endl;
 	}
 	double Rsum[N_all_observables] = {0}; double sgn_sum = 0; int o = 0;
 	double over_bins_sum[N_all_observables] = {0}; double over_bins_sum_sgn = 0;
 	double over_bins_sum_cov[N_all_observables] = {0}; double mean[N_all_observables]; double stdev[N_all_observables];
 	MPI_Barrier(MPI_COMM_WORLD);
-	if(mpi_rank == 0) output << "Total number of MC updates = " << steps*(unsigned long long)mpi_size << std::endl;
+	if(mpi_rank == 0) std::cout << "Total number of MC updates = " << steps*(unsigned long long)mpi_size << std::endl;
 	MPI_Reduce(&elapsed_time,&gathered_elapsed_time,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	MPI_Reduce(&meanq,&gathered_meanq,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD); gathered_meanq /= mpi_size;
-	if(mpi_rank == 0) output << "Total mean(q) = " << gathered_meanq << std::endl;
+	if(mpi_rank == 0) std::cout << "Total mean(q) = " << gathered_meanq << std::endl;
 	MPI_Reduce(&maxq,&gathered_maxq,1,MPI_DOUBLE,MPI_MAX,0,MPI_COMM_WORLD);
-	if(mpi_rank == 0) output << "Total max(q) = " << gathered_maxq << std::endl;
+	if(mpi_rank == 0) std::cout << "Total max(q) = " << gathered_maxq << std::endl;
 	MPI_Reduce(&qmax_achieved,&gathered_qmax_achieved,1,MPI_INT,MPI_MAX,0,MPI_COMM_WORLD);
-	if(mpi_rank == 0 && gathered_qmax_achieved) output << "Warning: qmax = " << qmax << " was achieved by at least one of the MPI processes. The results may be incorrect. The qmax parameter should be increased." << std::endl;
+	if(mpi_rank == 0 && gathered_qmax_achieved) std::cout << "Warning: qmax = " << qmax << " was achieved by at least one of the MPI processes. The results may be incorrect. The qmax parameter should be increased." << std::endl;
 	MPI_Reduce(bin_mean_sgn,gathered_bin_mean_sgn,Nbins,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	if(mpi_rank == 0){
 		for(i=0;i<Nbins;i++) gathered_bin_mean_sgn[i] /= mpi_size;
 		for(i=0;i<Nbins;i++) sgn_sum += gathered_bin_mean_sgn[i]; sgn_sum /= Nbins;
 		for(i=0;i<Nbins;i++) over_bins_sum_sgn += (gathered_bin_mean_sgn[i] - sgn_sum)*(gathered_bin_mean_sgn[i] - sgn_sum); over_bins_sum_sgn /= (Nbins*(Nbins-1));
-		output << std::setprecision(9);
-		output << "Total mean(sgn(W)) = " << sgn_sum << std::endl;
-		output << "Total std.dev.(sgn(W)) = " << sqrt(over_bins_sum_sgn) << std::endl;
+		std::cout << std::setprecision(9);
+		std::cout << "Total mean(sgn(W)) = " << sgn_sum << std::endl;
+		std::cout << "Total std.dev.(sgn(W)) = " << sqrt(over_bins_sum_sgn) << std::endl;
 	}
 	for(k=0;k<N_all_observables;k++) if(valid_observable[k]){
 		MPI_Reduce(bin_mean[k],gathered_bin_mean,Nbins,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 		if(mpi_rank == 0){
-			output << "Total of observable #" << ++o << ": "<< name_of_observable(k) << std::endl;
+			std::cout << "Total of observable #" << ++o << ": "<< name_of_observable(k) << std::endl;
 			for(i=0;i<Nbins;i++) gathered_bin_mean[i] /= mpi_size;
 			for(i=0;i<Nbins;i++) Rsum[k] += gathered_bin_mean[i]; Rsum[k] /= Nbins;
 			for(i=0;i<Nbins;i++) over_bins_sum[k] += (gathered_bin_mean[i] - Rsum[k])*(gathered_bin_mean[i] - Rsum[k]); over_bins_sum[k] /= (Nbins*(Nbins-1));
 			for(i=0;i<Nbins;i++) over_bins_sum_cov[k] += (gathered_bin_mean[i] - Rsum[k])*(gathered_bin_mean_sgn[i] - sgn_sum); over_bins_sum_cov[k] /= (Nbins*(Nbins-1));
 			mean[k] = Rsum[k]/sgn_sum*(1 + over_bins_sum_sgn/sgn_sum/sgn_sum) - over_bins_sum_cov[k]/sgn_sum/sgn_sum;
 			stdev[k] = fabs(Rsum[k]/sgn_sum)*sqrt(over_bins_sum[k]/Rsum[k]/Rsum[k] + over_bins_sum_sgn/sgn_sum/sgn_sum - 2*over_bins_sum_cov[k]/Rsum[k]/sgn_sum);
-			output << "Total mean(O) = " << mean[k] << std::endl;
-			output << "Total std.dev.(O) = " << stdev[k] << std::endl;
+			std::cout << "Total mean(O) = " << mean[k] << std::endl;
+			std::cout << "Total std.dev.(O) = " << stdev[k] << std::endl;
 		}
 	}
 	if(mpi_rank == 0){
-		output << "Total elapsed cpu time = " << gathered_elapsed_time << " seconds" << std::endl;
+		std::cout << "Total elapsed cpu time = " << gathered_elapsed_time << " seconds" << std::endl;
 		elapsed_time = MPI_Wtime()-start_time;
-		output << std::endl << "Wall-clock time = " << elapsed_time << " seconds" << std::endl;
-		output.close();
+		std::cout << std::endl << "Wall-clock time = " << elapsed_time << " seconds" << std::endl;
 	}
 	MPI_Finalize();
 	divdiff_clear_up();
