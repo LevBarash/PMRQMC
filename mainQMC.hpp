@@ -48,7 +48,6 @@ ExExFloat beta_pow_factorial[qmax]; // contains the values (-beta)^q / q!
 double factorial[qmax]; // contains the values q!
 int cycle_len[Ncycles];
 int cycles_used[Ncycles];
-int n_cycles[Nop+3]; // numbers of cycles of lengths 0,1,2,...,Nop+2, the last three values are always zeros.
 int cycle_min_len, cycle_max_len, found_cycles, min_index, max_index;
 
 #ifndef MEASURE_CUSTOM_OBSERVABLES
@@ -72,6 +71,7 @@ divdiff* d;
 std::bitset<N> lattice;
 std::bitset<N> z;
 std::bitset<Nop> P;
+std::bitset<Ncycles> P_in_cycles[Nop];
 
 int Sq[qmax];	// list of q operator indices
 int Sq_backup[qmax];
@@ -135,8 +135,10 @@ ExExFloat UpdateWeight(){
 }
 
 ExExFloat UpdateWeightReplace(double removeEnergy, double addEnergy){
-	if(removeEnergy != addEnergy) if(d->RemoveValue(-beta*removeEnergy)) d->AddElement(-beta*addEnergy); else{
-		std::cout << "Error: energy not found" << std::endl; exit(1);
+	if(removeEnergy != addEnergy){
+		if(d->RemoveValue(-beta*removeEnergy)) d->AddElement(-beta*addEnergy); else{
+			std::cout << "Error: energy not found" << std::endl; exit(1);
+		}
 	}
 	return d->divdiffs[q] * beta_pow_factorial[q] * currD.real(); // use this value only when the values of q and currD are correct
 }
@@ -167,22 +169,23 @@ void PickSubsequence(int r){ // randomly picks a sequential sub-sequence of leng
 }
 
 int FindCycles(int r){  // find all cycles of length between lmin and lmax, each containing all operators of the array Sq_subseq of length r.
-	int i,j,not_contained;
-	int found_cycle_list[Ncycles];
-	found_cycles = 0;                                  // found_cycles contains the number of cycles found. it is global variable.
-	for(i=0;i<Ncycles;i++){
-		if(cycle_len[i]<lmin || cycle_len[i]>lmax) continue;
-		not_contained = 0; for(j=0;j<r;j++) if(!cycles[i].test(Sq_subseq[j])){ not_contained = 1; break;}
-		if(not_contained) continue;
-		found_cycle_list[found_cycles++] = i;
-	}
-	return found_cycles>0 ? found_cycle_list[int(val(rng)*found_cycles)] : -1; // returns one of the found cycles chosen randomly.
+	int i,k,sum; std::bitset<Ncycles> curr; curr.set();
+	for(i=0;i<r;i++) curr &= P_in_cycles[Sq_subseq[i]];
+#ifndef EXHAUSTIVE_CYCLE_SEARCH
+	for(i=0;i<Ncycles;i++) if(curr[i]) if(cycle_len[i]<lmin || cycle_len[i]>lmax) curr.reset(i);
+#endif
+	found_cycles = curr.count();
+	if(found_cycles > 0){
+		k = int(val(rng)*found_cycles);
+		i=sum=0; while(sum <= k) sum += curr[i++]; i--;
+		return i;
+	} else return -1;
 }
 
 unsigned int rng_seed;
 
 void init(){
-	int i; double curr2=1; ExExFloat curr1; beta_pow_factorial[0] = curr1; factorial[0] = curr2;
+	int i,j; double curr2=1; ExExFloat curr1; beta_pow_factorial[0] = curr1; factorial[0] = curr2;
 	for(q=1;q<qmax;q++){ curr1*=(-beta)/q; curr2*=q; beta_pow_factorial[q] = curr1; factorial[q] = curr2;}
 	rng_seed = rd(); rng.seed(rng_seed);
 	lattice = 0; for(i=N-1;i>=0;i--) if(dice2(rng)) lattice.set(i); z = lattice; q=0;
@@ -191,7 +194,7 @@ void init(){
 	cycle_min_len = 64; for(i=0;i<Ncycles;i++) cycle_min_len = min(cycle_min_len,cycle_len[i]);
 	cycle_max_len = 0; for(i=0;i<Ncycles;i++) cycle_max_len = max(cycle_max_len,cycle_len[i]);
 	for(i=0;i<Ncycles;i++) cycles_used[i] = 0;
-	for(i=0;i<Nop+3;i++) n_cycles[i] = 0; for(i=0;i<Ncycles;i++) n_cycles[cycle_len[i]]++;
+	for(i=0;i<Nop;i++) for(j=0;j<Ncycles;j++) if(cycles[j].test(i)) P_in_cycles[i].set(j);
 	for(i=0;i<N_all_observables;i++) in_bin_sum[i] = 0; in_bin_sum_sgn = 0;
 	for(i=0;i<N_all_observables;i++) valid_observable[i] = 0;
 #ifdef MEASURE_CUSTOM_OBSERVABLES
@@ -395,28 +398,30 @@ std::string name_of_observable(int n){
 
 double measure_observable(int n){
 	double R = 0;
-	if(valid_observable[n]) if(n < Nobservables){
+	if(valid_observable[n]){
+		if(n < Nobservables){
 #ifdef MEASURE_CUSTOM_OBSERVABLES
-		int i,k,len,cont;
-		std::complex<double> T = calc_MD0(n);
-		for(k=0;k<MNop[n];k++){
-			P = MP[n][k]; len = P.count(); if(len>q) continue;
-			if(!NoRepetitionCheck(Sq+(q-len),len)) continue;
-			cont = 0; for(i=0;i<len;i++) if(!P.test(Sq[q-1-i])){ cont = 1; break;} if(cont) continue;
-			T +=	(d->divdiffs[q-len]/d->divdiffs[q]).get_double() *
-			        (beta_pow_factorial[q-len]/beta_pow_factorial[q]).get_double()/factorial[len] *
-				(currD_partial[q-len]/currD) * calc_MD(n,k);
-		}
-		R = (currD*T).real()/currD.real(); // we importance-sample Re(W_C A_C)/Re(W_C)
+			int i,k,len,cont;
+			std::complex<double> T = calc_MD0(n);
+			for(k=0;k<MNop[n];k++){
+				P = MP[n][k]; len = P.count(); if(len>q) continue;
+				if(!NoRepetitionCheck(Sq+(q-len),len)) continue;
+				cont = 0; for(i=0;i<len;i++) if(!P.test(Sq[q-1-i])){ cont = 1; break;} if(cont) continue;
+				T +=	(d->divdiffs[q-len]/d->divdiffs[q]).get_double() *
+				        (beta_pow_factorial[q-len]/beta_pow_factorial[q]).get_double()/factorial[len] *
+					(currD_partial[q-len]/currD) * calc_MD(n,k);
+			}
+			R = (currD*T).real()/currD.real(); // we importance-sample Re(W_C A_C)/Re(W_C)
 #endif
-	} else  switch(n-Nobservables){
-			case 0:	R = measure_H(); break;
-			case 1:	R = measure_H2(); break;
-			case 2:	R = measure_Hdiag(); break;
-			case 3:	R = measure_Hdiag2(); break;
-			case 4:	R = measure_Hoffdiag(); break;
-			case 5:	R = measure_Hoffdiag2(); break;
-			case 6: R = measure_Z_magnetization(); break;
+		} else  switch(n-Nobservables){
+				case 0:	R = measure_H(); break;
+				case 1:	R = measure_H2(); break;
+				case 2:	R = measure_Hdiag(); break;
+				case 3:	R = measure_Hdiag2(); break;
+				case 4:	R = measure_Hoffdiag(); break;
+				case 5:	R = measure_Hoffdiag2(); break;
+				case 6: R = measure_Z_magnetization(); break;
+		}
 	}
 	return R;
 }

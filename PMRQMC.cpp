@@ -11,13 +11,17 @@
 // L. Gupta, L. Barash, I. Hen, Calculating the divided differences of the exponential function by addition and removal of inputs, Computer Physics Communications 254, 107385 (2020)
 //
 
-#include"mainqmc.hpp"
+#include"mainQMC.hpp"
 
 double get_cpu_time(){ return (double)clock() / CLOCKS_PER_SEC;}
 
 int main(int argc, char* argv[]){
 	if(steps < Nbins*stepsPerMeasurement){
-		std::cout<<"Error: steps cannot be smaller than Nbins*stepsPerMeasurement."<<std::endl;
+		std::cout << "Error: steps cannot be smaller than Nbins*stepsPerMeasurement." << std::endl;
+		exit(1);
+	}
+	if(N == 0){
+		std::cout << "Error: no particles found. At least one particle must be described by the Hamiltonian." << std::endl;
 		exit(1);
 	}
 	double start_time = get_cpu_time();

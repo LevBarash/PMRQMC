@@ -41,7 +41,7 @@ void printMatrix(const vector<vector<T>>& matrix) {
 vector<int> GF2_add(vector<int> vec1 , vector<int> vec2){
     vector<int> result;
     if (vec1.size() != vec2.size()){
-        cerr << "The size of the added vectors are differen!" << endl;
+        cerr << "The size of the added vectors are different!" << endl;
     }
 
     for(int i = 0; i < vec1.size(); i++){
@@ -248,8 +248,7 @@ vector<pair<complex<double>, vector<int>>> data_extract(const string& fileName){
 
     ifstream inputFile(fileName);
     if (!inputFile) {
-        cout << "Failed to open the input file!" << endl;
-        return data;
+        cout << "Failed to open the input file!" << endl; exit(1);
     }
 
     string line;
@@ -263,6 +262,7 @@ vector<pair<complex<double>, vector<int>>> data_extract(const string& fileName){
         char sign;
         string complexPart;
         iss >> complexPart; 
+        if(complexPart.length() == 0) continue; // empty lines, as well as lines containing nothing but spaces, are ignored
 
         istringstream complexIss(complexPart);
         complexIss >> realpart >> imagpart;
@@ -278,11 +278,17 @@ vector<pair<complex<double>, vector<int>>> data_extract(const string& fileName){
                       token == "Z" || token == "z" ? 3 : std::stoi(token);
             integers.push_back(num);
         }
+	if(integers.size()%2){
+              cout << endl << "Error: Pauli matrix was not specified" << endl; exit(1);
+	}
         linedata.second = integers;
 
         data.push_back(linedata);
-        }
-        inputFile.close();
+    }
+    inputFile.close();
+    if(data.size() == 0){
+         cout << endl << "Error: input file is empty" << endl; exit(1);
+    }
     return data;
 }
 
@@ -384,6 +390,9 @@ PZdata PZcomp(const vector<pair<complex<double>,vector<int>>>& data) {
 
             if (qubit <= 0){
                 cout << endl << "Error: " << qubit << " is incorrect spin index. Spin indices must be positive integers." << endl; exit(1);
+            }
+            if (pauli_j < 0 || pauli_j > 3){
+		cout << endl << "Error: incorrectly specified Pauli matrix" << endl; exit(1);
             }
             if (qubit > no_qubit) no_qubit = qubit;
             if (pauli_j == 1) {
@@ -816,7 +825,7 @@ void main2(int argc , char* argv[]){
        for(int i = 0 ; i < no_ops[O]; i++){
             // This condition checks if there are permutations in the observables file that are not in the Hamiltonian!
             if(rel_perms[O].size() < counter + 1){
-                cerr << endl << "Error! The input Observable cannot be written in terms of the Permutation operators of the Hamiltonian." << endl;
+                cout << endl << "Error! The input observable cannot be written in terms of the permutation operators of the Hamiltonian." << endl;
                 exit(1);
             }
             if(rel_perms[O][counter] == i){

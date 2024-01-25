@@ -63,7 +63,7 @@ public:
 			exponent = obj.exponent; normalize();
 		} else{
 			mantissa = mantissa + obj.mantissa*invPowersOf2[exponent - obj.exponent];
-			exponent = exponent; normalize();
+			normalize();
 		}
 		return *this;
 	}
@@ -73,7 +73,7 @@ public:
 			exponent = obj.exponent; normalize();
 		} else{
 			mantissa = mantissa - obj.mantissa*invPowersOf2[exponent - obj.exponent];
-			exponent = exponent; normalize();
+			normalize();
 		}
 		return *this;
 	}

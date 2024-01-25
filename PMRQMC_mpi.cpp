@@ -11,8 +11,7 @@
 // L. Gupta, L. Barash, I. Hen, Calculating the divided differences of the exponential function by addition and removal of inputs, Computer Physics Communications 254, 107385 (2020)
 //
 
-#include"mainqmc.hpp"
-#include<fstream>
+#include"mainQMC.hpp"
 #include<mpi.h>
 
 double start_time, elapsed_time;
@@ -69,7 +68,11 @@ int main(int argc, char* argv[]){
 	MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
 	if(steps < Nbins*stepsPerMeasurement){
 		std::cout << "Error: steps cannot be smaller than Nbins*stepsPerMeasurement." << std::endl;
-		exit(1);
+		MPI_Finalize(); exit(1);
+	}
+	if(N == 0){
+		std::cout << "Error: no particles found. At least one particle must be described by the Hamiltonian." << std::endl;
+		MPI_Finalize(); exit(1);
 	}
 	std::cout << "Starting calculation for MPI process No. " << mpi_rank << std::endl; fflush(stdout);
 	compute();
