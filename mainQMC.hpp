@@ -48,6 +48,7 @@ ExExFloat beta_pow_factorial[qmax]; // contains the values (-beta)^q / q!
 double factorial[qmax]; // contains the values q!
 int cycle_len[Ncycles];
 int cycles_used[Ncycles];
+int cycles_used_backup[Ncycles];
 int cycle_min_len, cycle_max_len, found_cycles, min_index, max_index;
 
 #ifndef MEASURE_CUSTOM_OBSERVABLES
@@ -84,7 +85,7 @@ double currEnergy;
 std::complex<double> old_currD, currD;
 std::complex<double> currD_partial[qmax];
 
-ExExFloat one, currWeight;
+ExExFloat zero, currWeight;
 unsigned long long step;
 unsigned long long measurement_step;
 
@@ -187,7 +188,7 @@ unsigned int rng_seed;
 void init(){
 	int i,j; double curr2=1; ExExFloat curr1; beta_pow_factorial[0] = curr1; factorial[0] = curr2;
 	for(q=1;q<qmax;q++){ curr1*=(-beta)/q; curr2*=q; beta_pow_factorial[q] = curr1; factorial[q] = curr2;}
-	rng_seed = rd(); rng.seed(rng_seed);
+	rng_seed = rd(); rng.seed(rng_seed); zero -= zero;
 	lattice = 0; for(i=N-1;i>=0;i--) if(dice2(rng)) lattice.set(i); z = lattice; q=0;
 	currWeight = GetWeight();
 	for(i=0;i<Ncycles;i++) cycle_len[i] = cycles[i].count();
@@ -228,77 +229,82 @@ double Metropolis(ExExFloat newWeight){
 }
 
 void update(){
-	int i,m,p,r,u; double oldE, oldE2, v = Nop>0 ? val(rng) : 1; ExExFloat newWeight;
-	if(v < 0.3){ //local move
-		if(v<0.1 && q>=2){ // attempt to swap Sq[m] and Sq[m+1]
-			m = int(val(rng)*(q-1)); // m is between 0 and (q-2)
-			if(Sq[m]!=Sq[m+1]){
-				oldE = Energies[m+1]; old_currD = currD;
-				p = Sq[m]; Sq[m] = Sq[m+1]; Sq[m+1] = p; GetEnergies(); newWeight = UpdateWeightReplace(oldE,Energies[m+1]);
-				if(val(rng) < Metropolis(newWeight)) currWeight = newWeight; else {
-					Sq[m+1] = Sq[m]; Sq[m] = p; currD = old_currD;
-					UpdateWeightReplace(Energies[m+1],oldE); Energies[m+1] = oldE;
-				}
-			}
-		} else if(v<0.2){ // attempt to delete Sq[m] and Sq[m+1]
-			if(q>=2){
+	int i,m,p,r,u,oldq,cont; double oldE, oldE2, v = Nop>0 ? val(rng) : 1; ExExFloat newWeight; double Rfactor;
+	if(v < 0.8){ 
+		Rfactor = 1; oldq = q; memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(cycles_used_backup,cycles_used,Ncycles*sizeof(int));
+		newWeight = currWeight;
+		do{
+			cont = 0;
+			if(v < 0.2 && q>=2){ // attempt to swap Sq[m] and Sq[m+1]
 				m = int(val(rng)*(q-1)); // m is between 0 and (q-2)
-				if(Sq[m]==Sq[m+1]){
-					oldE = Energies[m]; oldE2 = Energies[m+1]; old_currD = currD;
-					memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
-					for(i=m;i<q-2;i++) Sq[i] = Sq[i+2]; q-=2;
-					GetEnergies(); newWeight = UpdateWeightDel(oldE,oldE2);
-					if(val(rng) < Metropolis(newWeight)/Nop) currWeight = newWeight; else{
-						q+=2; memcpy(Sq,Sq_backup,q*sizeof(int)); memcpy(Energies,Energies_backup,(q+1)*sizeof(double));
-						currD = old_currD; UpdateWeightIns(oldE,oldE2);
+				if(Sq[m]!=Sq[m+1]){
+					oldE = Energies[m+1]; old_currD = currD;
+					p = Sq[m]; Sq[m] = Sq[m+1]; Sq[m+1] = p;
+					GetEnergies();
+					newWeight = UpdateWeightReplace(oldE,Energies[m+1]);
+					if(currD.real() == 0) cont = 1;
+				}
+			} else if(v < 0.4){ // attempt to delete Sq[m] and Sq[m+1]
+				if(q>=2){
+					m = int(val(rng)*(q-1)); // m is between 0 and (q-2)
+					if(Sq[m]==Sq[m+1]){
+						oldE = Energies[m]; oldE2 = Energies[m+1]; old_currD = currD;
+						for(i=m;i<q-2;i++) Sq[i] = Sq[i+2]; q-=2;
+						GetEnergies(); Rfactor /= Nop;
+						newWeight = UpdateWeightDel(oldE,oldE2);
+						if(currD.real() == 0) cont = 1;
+					}
+				}
+			} else if(v < 0.6){
+				if(q+2<qmax){ // attempt to insert Sq[m] and Sq[m+1]
+					m = int(val(rng)*(q+1)); // m is between 0 and q
+					old_currD = currD; p = diceNop(rng);
+					for(i=q-1;i>=m;i--) Sq[i+2] = Sq[i]; q+=2; Sq[m] = Sq[m+1] = p;
+					GetEnergies(); Rfactor *= Nop;
+					newWeight = UpdateWeightIns(Energies[m],Energies[m+1]);
+					if(currD.real() == 0) cont = 1;
+				} else qmax_achieved = 1;
+			} else{ // attempting a fundamental cycle completion
+				int j = 0, inv_pr; double wfactor;
+				u = geometric_int(rng); // a random integer u is picked according to geometric distribution
+				if(q >= u+rmin){
+					inv_pr = min(rmax,q-u)-(rmin)+1;
+					r = int(val(rng)*inv_pr) + (rmin);  // r is random integer between rmin and min(rmax,q-u)
+					PickSubsequence(r+u); // indexes of the subsequence are min_index, min_index+1,..., max_index=min_index+r+u-1
+					std::shuffle(Sq_subseq,Sq_subseq+r+u,rng);
+					if(NoRepetitionCheck(Sq_subseq,r)){
+						for(i=0;i<u;i++) Sq_gaps[i] = Sq_subseq[i+r];
+						m = FindCycles(r);
+						if(found_cycles > 0){ // cycles[m] is one of the found cycles, containing all the operators of Sq_subseq
+							P = cycles[m]; for(i=0;i<r;i++) P.reset(Sq_subseq[i]);
+							p = P.count(); // here, p is length of the complement sequence S'
+							if(q+p-r < qmax){
+								if(r<p)	     for(i=q-1;i>max_index;i--) Sq[i+p-r] = Sq[i]; // shift the values to the right
+								else if(r>p) for(i=max_index+1;i<q;i++) Sq[i+p-r] = Sq[i]; // shift the values to the left
+								for(i=0;i<p;i++){ while(!P.test(j)) j++; Sq_subseq[i] = Sq[min_index+i] = j++;}
+								for(i=0;i<u;i++) Sq[min_index+p+i] = Sq_gaps[i]; // S' contains the remaining operators
+								std::shuffle(Sq+min_index,Sq+min_index+p+u,rng);
+								q += p-r; // the length q may have changed
+								newWeight = UpdateWeight();
+								wfactor = found_cycles; FindCycles(p); wfactor /= found_cycles;
+								wfactor *= factorial[p]/factorial[r];
+								wfactor *= inv_pr; inv_pr = min(rmax,q-u)-(rmin)+1; wfactor /= inv_pr;
+								Rfactor *= wfactor;
+								cycles_used[m] = 1;
+								if(currD.real() == 0) cont = 1;
+							} else qmax_achieved = 1;
+						}
 					}
 				}
 			}
-		} else if(q+2<qmax){ // attempt to insert Sq[m] and Sq[m+1]
-			m = int(val(rng)*(q+1)); // m is between 0 and q
-			memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
-			old_currD = currD; p = diceNop(rng);
-			for(i=q-1;i>=m;i--) Sq[i+2] = Sq[i]; q+=2; Sq[m] = Sq[m+1] = p;
-			GetEnergies(); newWeight = UpdateWeightIns(Energies[m],Energies[m+1]);
-			if(val(rng) < Metropolis(newWeight)) currWeight = newWeight; else{
-				q-=2; memcpy(Sq,Sq_backup,q*sizeof(int)); memcpy(Energies,Energies_backup,(q+1)*sizeof(double));
-				currD = old_currD; d->RemoveElement(); d->RemoveElement();
-			}
-		} else qmax_achieved = 1;
-	} else if(v < 0.5){ // attempting a fundamental cycle completion
-		int oldq, j = 0, inv_pr; double wfactor;
-		u = geometric_int(rng); // a random integer u is picked according to geometric distribution
-		if(q >= u+rmin){
-			inv_pr = min(rmax,q-u)-(rmin)+1;
-			r = int(val(rng)*inv_pr) + (rmin);  // r is random integer between rmin and min(rmax,q-u)
-			PickSubsequence(r+u); // indexes of the subsequence are min_index, min_index+1,..., max_index=min_index+r+u-1
-			std::shuffle(Sq_subseq,Sq_subseq+r+u,rng);
-			if(NoRepetitionCheck(Sq_subseq,r)){
-				for(i=0;i<u;i++) Sq_gaps[i] = Sq_subseq[i+r];
-				m = FindCycles(r);
-				if(found_cycles > 0){ // cycles[m] is one of the found cycles, containing all the operators of Sq_subseq
-					P = cycles[m]; for(i=0;i<r;i++) P.reset(Sq_subseq[i]);
-					p = P.count(); // here, p is length of the complement sequence S'
-					if(q+p-r < qmax){
-						memcpy(Sq_backup,Sq,q*sizeof(int)); oldq = q;
-						if(r<p)	     for(i=q-1;i>max_index;i--) Sq[i+p-r] = Sq[i]; // shift the values to the right
-						else if(r>p) for(i=max_index+1;i<q;i++) Sq[i+p-r] = Sq[i]; // shift the values to the left
-						for(i=0;i<p;i++){ while(!P.test(j)) j++; Sq_subseq[i] = Sq[min_index+i] = j++;}
-						for(i=0;i<u;i++) Sq[min_index+p+i] = Sq_gaps[i]; // S' contains the remaining operators
-						std::shuffle(Sq+min_index,Sq+min_index+p+u,rng);
-						q += p-r; // the length q may have changed
-						newWeight = UpdateWeight();
-						wfactor = found_cycles; FindCycles(p); wfactor /= found_cycles;
-						wfactor *= factorial[p]/factorial[r];
-						wfactor *= inv_pr; inv_pr = min(rmax,q-u)-(rmin)+1; wfactor /= inv_pr;
-						if(val(rng) < Metropolis(newWeight*wfactor)){
-							currWeight = newWeight; cycles_used[m] = 1;
-						} else{
-							q = oldq; memcpy(Sq,Sq_backup,q*sizeof(int)); currWeight = UpdateWeight();
-						}
-					} else qmax_achieved = 1;
-				}
-			}
+		} while(cont && val(rng) < 0.1);
+		if(currD.real() != 0 && val(rng) < Metropolis(newWeight*Rfactor)){
+			currWeight = newWeight;
+		} else{
+			q = oldq;
+			memcpy(Sq,Sq_backup,q*sizeof(int));
+			memcpy(cycles_used,cycles_used_backup,Ncycles*sizeof(int));
+			currWeight = UpdateWeight();
 		}
 	} else if(v < 0.9 && q>=2){ // attempting a block swap
 		m = q==2 ? 0 : int(val(rng)*(q-1)); // m is between 0 and (q-2)
