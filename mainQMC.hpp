@@ -187,7 +187,7 @@ unsigned int rng_seed;
 
 void init(){
 	int i,j; double curr2=1; ExExFloat curr1; beta_pow_factorial[0] = curr1; factorial[0] = curr2;
-	for(q=1;q<qmax;q++){ curr1*=(-beta)/q; curr2*=q; beta_pow_factorial[q] = curr1; factorial[q] = curr2;}
+	for(q=1;q<qmax;q++){ curr1*=(-double(beta))/q; curr2*=q; beta_pow_factorial[q] = curr1; factorial[q] = curr2;}
 	rng_seed = rd(); rng.seed(rng_seed); zero -= zero;
 	lattice = 0; for(i=N-1;i>=0;i--) if(dice2(rng)) lattice.set(i); z = lattice; q=0;
 	currWeight = GetWeight();

@@ -14,17 +14,21 @@
 #include"mainQMC.hpp"
 #include<mpi.h>
 
+int mpi_rank, mpi_size;
 double start_time, elapsed_time;
 
 void compute(){
 	start_time = MPI_Wtime(); 
 	divdiff dd(q+4,500); d=&dd; init();
+	std::cout << "Starting calculation for MPI process No. " << mpi_rank << ", RNG seed = " << rng_seed << std::endl; fflush(stdout);
 	for(step=0;step<Tsteps;step++) update();
 	for(measurement_step=0;measurement_step<measurements;measurement_step++){
 		for(step=0;step<stepsPerMeasurement;step++) update(); measure();
 	}
 	meanq /= measurements;
 	elapsed_time = MPI_Wtime()-start_time;
+	std::cout << "Calculation completed for MPI process No. " << mpi_rank
+	          << ", elapsed time = " << elapsed_time << " seconds" << std::endl; fflush(stdout);
 }
 
 void printout(){
@@ -62,7 +66,7 @@ double gathered_bin_mean_sgn[Nbins];
 double gathered_bin_mean[Nbins];
 
 int main(int argc, char* argv[]){
-	int i, k, mpi_rank, mpi_size; divdiff_init();
+	int i, k; divdiff_init();
 	MPI_Init(&argc,&argv);
 	MPI_Comm_rank(MPI_COMM_WORLD,&mpi_rank);
 	MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
@@ -74,10 +78,7 @@ int main(int argc, char* argv[]){
 		std::cout << "Error: no particles found. At least one particle must be described by the Hamiltonian." << std::endl;
 		MPI_Finalize(); exit(1);
 	}
-	std::cout << "Starting calculation for MPI process No. " << mpi_rank << std::endl; fflush(stdout);
 	compute();
-	std::cout << "Calculation completed for MPI process No. " << mpi_rank
-	          << ", elapsed time = " << elapsed_time << " seconds, RNG seed = " << rng_seed << std::endl; fflush(stdout);
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(mpi_rank == 0){
 		std::cout << std::endl;
