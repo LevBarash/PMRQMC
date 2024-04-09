@@ -233,6 +233,16 @@ void PrintList(int* list, int len, const char* namelist){
 	printf("};\n");
 }
 
+void PrintList(std::vector<int> list, const char* namelist){
+	int i; int len = list.size();
+	printf("%s={",namelist);
+	for(i=0;i<len;i++){
+		printf("%d",list[i]);
+		if(i<len-1) printf(",");
+	}
+	printf("};\n");
+}
+
 void Backupz(int len){ z2 = new double[len]; memcpy(z2,z,len*sizeof(double));}
 void Restorez(int len){ memcpy(z,z2,len*sizeof(double)); delete[] z2;}
 

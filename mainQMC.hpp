@@ -234,17 +234,19 @@ void update(){
 		Rfactor = 1; oldq = q; memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(cycles_used_backup,cycles_used,Ncycles*sizeof(int));
 		newWeight = currWeight;
 		do{
-			cont = 0;
-			if(v < 0.2 && q>=2){ // attempt to swap Sq[m] and Sq[m+1]
-				m = int(val(rng)*(q-1)); // m is between 0 and (q-2)
-				if(Sq[m]!=Sq[m+1]){
-					oldE = Energies[m+1]; old_currD = currD;
-					p = Sq[m]; Sq[m] = Sq[m+1]; Sq[m+1] = p;
-					GetEnergies();
-					newWeight = UpdateWeightReplace(oldE,Energies[m+1]);
-					if(currD.real() == 0) cont = 1;
+			cont = 0; v = val(rng);
+			if(v < 0.25){ // attempt to swap Sq[m] and Sq[m+1]
+				if(q>=2){
+					m = int(val(rng)*(q-1)); // m is between 0 and (q-2)
+					if(Sq[m]!=Sq[m+1]){
+						oldE = Energies[m+1]; old_currD = currD;
+						p = Sq[m]; Sq[m] = Sq[m+1]; Sq[m+1] = p;
+						GetEnergies();
+						newWeight = UpdateWeightReplace(oldE,Energies[m+1]);
+						if(currD.real() == 0) cont = 1;
+					}
 				}
-			} else if(v < 0.4){ // attempt to delete Sq[m] and Sq[m+1]
+			} else if(v < 0.5){ // attempt to delete Sq[m] and Sq[m+1]
 				if(q>=2){
 					m = int(val(rng)*(q-1)); // m is between 0 and (q-2)
 					if(Sq[m]==Sq[m+1]){
@@ -255,7 +257,7 @@ void update(){
 						if(currD.real() == 0) cont = 1;
 					}
 				}
-			} else if(v < 0.6){
+			} else if(v < 0.75){
 				if(q+2<qmax){ // attempt to insert Sq[m] and Sq[m+1]
 					m = int(val(rng)*(q+1)); // m is between 0 and q
 					old_currD = currD; p = diceNop(rng);
