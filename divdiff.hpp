@@ -125,6 +125,15 @@ void divdiff_init(){
 
 void divdiff_clear_up(){ delete[] invPowersOf2; }
 
+class divdiff{
+
+protected:
+
+double *z2;
+ExExFloat *h, *ddd;
+int s, maxlen = 10001, smax = 500; 
+double mu; ExExFloat expmu;
+
 double mean(double* z, int n){
 	double sum=0; int i;
 	for(i=0;i<n;i++) sum+=z[i];
@@ -136,15 +145,6 @@ double maxAbsDiff(double* z, int len){
 	for(i=1;i<len;i++) { zmin = min(zmin,z[i]); zmax = max(zmax,z[i]);}
 	return fabs(zmax-zmin);
 }
-
-class divdiff{
-
-protected:
-
-double *z2;
-ExExFloat *h, *ddd;
-int s, maxlen = 10001, smax = 500; 
-double mu; ExExFloat expmu;
 
 public:
 
