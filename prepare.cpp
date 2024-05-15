@@ -367,6 +367,22 @@ struct PZdata {
     ZVecs Z_track;
 };
 
+
+bool Z_compare(vector<int> Z1 , vector<int> Z2){
+    vector<int> Z1copy = Z1 , Z2copy = Z2;
+    if(Z1copy.size() != Z2copy.size()){
+        return false;
+    }
+    sort(Z1copy.begin() , Z1copy.end());
+    sort(Z2copy.begin() , Z2copy.end());
+    for(int i=0; i < Z1copy.size(); i++){
+        if(Z1copy[i] != Z2copy[i]){
+            return false;
+        }
+    }
+    return true;
+}
+
 PZdata PZcomp(const vector<pair<complex<double>,vector<int>>>& data) {
     PZdata PZ_data;
     int l = data.size(),z_count = 0;
@@ -430,8 +446,9 @@ PZdata PZcomp(const vector<pair<complex<double>,vector<int>>>& data) {
 
             bool z_found = false;
             for (int k = 0; k < z_indices.size(); k++){
-                if (Zs[z_indices[k]] == zs_i){
-                    coeffs[P_index] += coeff_i;
+                if (Z_compare(Zs[z_indices[k]] , zs_i)){
+                    //coeffs[P_index] += coeff_i;
+                    coeffs[z_indices[k]] += coeff_i;
                     z_found = true;
                     break;
                 }

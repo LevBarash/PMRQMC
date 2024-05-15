@@ -230,7 +230,7 @@ double Metropolis(ExExFloat newWeight){
 
 void update(){
 	int i,m,p,r,u,oldq,cont; double oldE, oldE2, v = Nop>0 ? val(rng) : 1; ExExFloat newWeight; double Rfactor;
-	if(v < 0.8){ 
+	if(v < 0.8){ // composite update
 		Rfactor = 1; oldq = q; memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(cycles_used_backup,cycles_used,Ncycles*sizeof(int));
 		newWeight = currWeight;
 		do{

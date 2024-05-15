@@ -94,34 +94,36 @@ int main(int argc, char* argv[]){
 		printout_single_run();
 		std::cout << std::endl;
 	}
-	if(mpi_rank == 0) std::cout << "Testing thermalization" << std::endl << std::endl;
-	MPI_Barrier(MPI_COMM_WORLD);
-	double* gathered_mean = new double[mpi_size]; double gathered_stdev, mean_mean, std_mean; sgn_stdev = sqrt(sgn_variance);
-	MPI_Gather(&sgn_mean,1,MPI_DOUBLE,gathered_mean,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
-	MPI_Reduce(&sgn_stdev,&gathered_stdev,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-	if(mpi_rank == 0){
-		mean_mean = std_mean = 0; gathered_stdev /= mpi_size;
-		for(i=0;i<mpi_size;i++) mean_mean += gathered_mean[i]; mean_mean /= mpi_size;
-		for(i=0;i<mpi_size;i++) std_mean += (gathered_mean[i] - mean_mean)*(gathered_mean[i] - mean_mean);
-		if(mpi_size>1) std_mean /= (mpi_size - 1); std_mean = sqrt(std_mean);
-		// std::cout << "mean of std.dev.(sgn(W)) = " << gathered_stdev << ", std.dev. of mean(sgn(W)) = " << std_mean;
-		// if(gathered_stdev >= 0.7 * std_mean) std::cout << ": test passed" << std::endl; else std::cout << ": test failed" << std::endl;
-	}
-	for(k=0;k<N_all_observables;k++) if(valid_observable[k]){
-		MPI_Gather(&mean_O[k],1,MPI_DOUBLE,gathered_mean,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
-		MPI_Reduce(&stdev_O[k],&gathered_stdev,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	if(mpi_size>4){
+		if(mpi_rank == 0) std::cout << "Testing thermalization" << std::endl << std::endl;
+		MPI_Barrier(MPI_COMM_WORLD);
+		double* gathered_mean = new double[mpi_size]; double gathered_stdev, mean_mean, std_mean; sgn_stdev = sqrt(sgn_variance);
+		MPI_Gather(&sgn_mean,1,MPI_DOUBLE,gathered_mean,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+		MPI_Reduce(&sgn_stdev,&gathered_stdev,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 		if(mpi_rank == 0){
-			std::cout << "Observable #" << ++o << ": "<< name_of_observable(k);
 			mean_mean = std_mean = 0; gathered_stdev /= mpi_size;
 			for(i=0;i<mpi_size;i++) mean_mean += gathered_mean[i]; mean_mean /= mpi_size;
 			for(i=0;i<mpi_size;i++) std_mean += (gathered_mean[i] - mean_mean)*(gathered_mean[i] - mean_mean);
-			if(mpi_size>1) std_mean /= (mpi_size - 1); std_mean = sqrt(std_mean);
-			std::cout << ", mean of std.dev.(O) = " << gathered_stdev << ", std.dev. of mean(O) = " << std_mean;
-			if(gathered_stdev >= 0.7 * std_mean) std::cout << ": test passed" << std::endl; else std::cout << ": test failed" << std::endl;
+			std_mean /= (mpi_size - 1); std_mean = sqrt(std_mean);
+			// std::cout << "mean of std.dev.(sgn(W)) = " << gathered_stdev << ", std.dev. of mean(sgn(W)) = " << std_mean;
+			// if(gathered_stdev >= 0.7 * std_mean) std::cout << ": test passed" << std::endl; else std::cout << ": test failed" << std::endl;
 		}
+		for(k=0;k<N_all_observables;k++) if(valid_observable[k]){
+			MPI_Gather(&mean_O[k],1,MPI_DOUBLE,gathered_mean,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+			MPI_Reduce(&stdev_O[k],&gathered_stdev,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+			if(mpi_rank == 0){
+				std::cout << "Observable #" << ++o << ": "<< name_of_observable(k);
+				mean_mean = std_mean = 0; gathered_stdev /= mpi_size;
+				for(i=0;i<mpi_size;i++) mean_mean += gathered_mean[i]; mean_mean /= mpi_size;
+				for(i=0;i<mpi_size;i++) std_mean += (gathered_mean[i] - mean_mean)*(gathered_mean[i] - mean_mean);
+				std_mean /= (mpi_size - 1); std_mean = sqrt(std_mean);
+				std::cout << ", mean of std.dev.(O) = " << gathered_stdev << ", std.dev. of mean(O) = " << std_mean;
+				if(gathered_stdev >= 0.7 * std_mean) std::cout << ": test passed" << std::endl; else std::cout << ": test failed" << std::endl;
+			}
+		}
+		delete[] gathered_mean; if(mpi_rank == 0) std::cout << std::endl;
 	}
-	delete[] gathered_mean;
-	if(mpi_rank == 0) std::cout << std::endl << "Collecting statistics and finalizing the calculation" << std::endl << std::endl;
+	if(mpi_rank == 0) std::cout << "Collecting statistics and finalizing the calculation" << std::endl << std::endl;
 	double Rsum[N_all_observables] = {0}; sgn_mean = 0; o = 0;
 	double over_bins_sum[N_all_observables] = {0}; sgn_variance = 0;
 	double over_bins_sum_cov[N_all_observables] = {0};
