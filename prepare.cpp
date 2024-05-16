@@ -268,6 +268,8 @@ vector<pair<complex<double>, vector<int>>> data_extract(const string& fileName){
         complexIss >> realpart >> imagpart;
         linedata.first = complex<double> (realpart , imagpart);
 
+	if(linedata.first == 0.0) continue; // if the coefficient is equal to zero, the line is ignored
+
         //Extracting the integer vectors of qubits and paulis:
         string token;
         vector<int> integers;
