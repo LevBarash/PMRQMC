@@ -12,11 +12,13 @@
 //
 
 #include<iostream>
+#include<fstream>
 #include<iomanip>
 #include<complex>
 #include<random>
 #include<cstdlib>
 #include<algorithm>
+#include<csignal>
 #include<bitset>
 #include"divdiff.hpp"
 #include"hamiltonian.hpp" // use a header file, which defines the Hamiltonian and the custom observables
@@ -42,7 +44,7 @@ static std::uniform_int_distribution<> dice2(0,1);
 static std::uniform_int_distribution<> diceN(0,N-1);
 static std::uniform_int_distribution<> diceNop(0,Nop-1);
 static std::uniform_real_distribution<> val(0.0,1.0);
-static std::geometric_distribution<> geometric_int(0.8);
+static std::geometric_distribution<> geometric_int(GAPS_GEOMETRIC_PARAMETER);
 
 ExExFloat beta_pow_factorial[qmax]; // contains the values (-beta)^q / q!
 double factorial[qmax]; // contains the values q!
@@ -58,7 +60,7 @@ int cycle_min_len, cycle_max_len, found_cycles, min_index, max_index;
 const int N_all_observables = Nobservables + 7;
 int valid_observable[N_all_observables];
 
-int bin_length = measurements / Nbins;
+unsigned long long bin_length = measurements / Nbins, bin_length_old;
 double in_bin_sum[N_all_observables];
 double bin_mean[N_all_observables][Nbins];
 double in_bin_sum_sgn;
@@ -85,9 +87,122 @@ double currEnergy;
 std::complex<double> old_currD, currD;
 std::complex<double> currD_partial[qmax];
 
-ExExFloat zero, currWeight;
-unsigned long long step;
-unsigned long long measurement_step;
+#ifdef ABS_WEIGHTS
+#define REALW    std::abs
+#else
+#define REALW    std::real
+#endif
+
+ExExFloat zero, currWeight; int TstepsFinished = 0;
+unsigned long long step = 0;
+unsigned long long measurement_step = 0;
+
+unsigned int rng_seed;
+double meanq = 0;
+double maxq = 0;
+int save_data_flag = 0, mpi_rank = 0, mpi_size = 0, resume_calc = 0;
+
+#define fout(obj) { foutput.write((char *)& obj, sizeof(obj)); }
+#define fin(obj)  { finput.read((char *)& obj, sizeof(obj)); }
+
+void save_QMC_data(int printout = 1){
+	if(printout) std::cout<<"SIGTERM signal detected. Saving unfinished calculation...";
+	char fname[100]; if(mpi_size>0) sprintf(fname,"qmc_data_%d.dat",mpi_rank); else sprintf(fname,"qmc_data.dat");
+	std::ofstream foutput(fname,std::ios::binary);
+	fout(rng); fout(bin_length);
+	fout(cycle_len); fout(cycles_used); fout(cycles_used_backup); fout(cycle_min_len); fout(cycle_max_len);
+	fout(found_cycles); fout(min_index); fout(max_index); fout(TstepsFinished);
+	fout(in_bin_sum); fout(bin_mean); fout(in_bin_sum_sgn); fout(bin_mean_sgn); 
+	fout(q); fout(qmax_achieved); fout(lattice); fout(z); fout(P); fout(P_in_cycles);
+	fout(Sq); fout(Sq_backup); fout(Sq_subseq); fout(Sq_gaps);
+	fout(Energies); fout(Energies_backup); fout(eoccupied); fout(currEnergy); fout(valid_observable);
+	fout(currD); fout(old_currD); fout(currD_partial); fout(zero); fout(currWeight); fout(step); fout(measurement_step); 
+	fout(rng_seed); fout(meanq); fout(maxq);
+	foutput.close(); if(printout) std::cout<<"done"<<std::endl; fflush(stdout);
+}
+
+int check_QMC_data(){
+#ifdef RESUME_CALCULATION
+	int i,r,g; char fname[100];
+	if(mpi_size>0){
+		r = 1;
+		for(i=0;i<mpi_size;i++){
+			sprintf(fname,"qmc_data_%d.dat",mpi_rank);
+			std::ifstream finput(fname,std::ios::binary);
+			g = finput.good(); if(g) finput.close(); r = r && g;
+		}
+	} else{
+		sprintf(fname,"qmc_data.dat");
+		std::ifstream finput(fname,std::ios::binary);
+		r = finput.good(); if(r) finput.close();
+	}
+#else
+	int r = 0;
+#endif
+	return r;
+}
+
+void load_QMC_data(){
+	char fname[100]; if(mpi_size>0) sprintf(fname,"qmc_data_%d.dat",mpi_rank); else sprintf(fname,"qmc_data.dat");
+	std::ifstream finput(fname,std::ios::binary);
+	if(finput.good()){
+		fin(rng); fin(bin_length_old);
+		fin(cycle_len); fin(cycles_used); fin(cycles_used_backup); fin(cycle_min_len); fin(cycle_max_len);
+		fin(found_cycles); fin(min_index); fin(max_index); fin(TstepsFinished);
+		fin(in_bin_sum); fin(bin_mean); fin(in_bin_sum_sgn); fin(bin_mean_sgn); 
+		fin(q); fin(qmax_achieved); fin(lattice); fin(z); fin(P); fin(P_in_cycles);
+		fin(Sq); fin(Sq_backup); fin(Sq_subseq); fin(Sq_gaps);
+		fin(Energies); fin(Energies_backup); fin(eoccupied); fin(currEnergy); fin(valid_observable);
+		fin(currD); fin(old_currD); fin(currD_partial); fin(zero); fin(currWeight); fin(step); fin(measurement_step); 
+		fin(rng_seed); fin(meanq); fin(maxq);
+		finput.close();
+		if(mpi_size > 0){
+			if(TstepsFinished){
+				std::cout<<"MPI process No. "<< mpi_rank <<" loaded unfinished calculation: all Tsteps completed, main steps completed: "
+				    <<measurement_step*stepsPerMeasurement<<" of "<<steps<<"."<<std::endl;
+			} else std::cout <<"MPI process No. "<< mpi_rank <<" loaded unfinished calculation: Tsteps completed: "<<step<<" of "<<Tsteps<<"."<<std::endl;
+		} else{
+			if(TstepsFinished){
+				std::cout<<"Loaded unfinished calculation: all Tsteps completed, main steps completed: "
+				    <<measurement_step*stepsPerMeasurement<<" of "<<steps<<"."<<std::endl;
+			} else std::cout <<"Loaded unfinished calculation: Tsteps completed: "<<step<<" of "<<Tsteps<<"."<<std::endl;
+		}
+	} else{
+		if(mpi_size>0) std::cout<<"MPI process No. "<<mpi_rank<<": error opening file "<<fname<<std::endl;
+		else std::cout<<"Error opening file "<<fname<<std::endl; fflush(stdout);
+#ifdef MPI_VERSION
+		MPI_Abort(MPI_COMM_WORLD,1);
+#else
+		exit(1);
+#endif
+	}
+	if(bin_length != bin_length_old){ // It is allowed to increase steps by an integer number of times for a completed calculation
+		if(bin_length > 0 && bin_length % bin_length_old == 0){ // All other parameters should remain unchanged
+			double sum; int i, j, o, m = bin_length / bin_length_old, curr_bins = Nbins/m; // merging bins together
+			for(o=0;o<N_all_observables;o++) for(i=0;i<curr_bins;i++){
+				sum = 0; for(j=0;j<m;j++) sum += bin_mean[o][m*i+j]; sum /= m;
+				bin_mean[o][i] = sum;
+			}
+			for(i=0;i<curr_bins;i++){
+				sum = 0; for(j=0;j<m;j++) sum += bin_mean_sgn[m*i+j]; sum /= m;
+				bin_mean_sgn[i] = sum;
+			}
+			for(o=0;o<N_all_observables;o++){
+				sum = 0; for(i=curr_bins*m;i<Nbins;i++) sum += bin_mean[o][i]*bin_length_old;
+				in_bin_sum[o] += sum;
+			}
+			sum = 0; for(i=curr_bins*m;i<Nbins;i++) sum += bin_mean_sgn[i]*bin_length_old;
+			in_bin_sum_sgn += sum;
+		} else{
+			std::cout << "Error: bin_length = " << bin_length <<" is not divisible by bin_length_old = " << bin_length_old << std::endl; fflush(stdout);
+#ifdef MPI_VERSION
+			MPI_Abort(MPI_COMM_WORLD,1);
+#else
+			exit(1);
+#endif
+		}
+	}
+}
 
 double CalcEnergy(){ // calculate the energy <z | D_0 | z> of a given configuration of spins
 	std::complex<double> sum = 0;
@@ -119,7 +234,7 @@ void GetEnergies(){
 ExExFloat GetWeight(){
 	d->CurrentLength=0; GetEnergies();
 	for(int i=0;i<=q;i++) d->AddElement(-beta*Energies[i]);
-	return d->divdiffs[q] * beta_pow_factorial[q] * currD.real();
+	return d->divdiffs[q] * beta_pow_factorial[q] * REALW(currD);
 }
 
 ExExFloat UpdateWeight(){
@@ -132,7 +247,7 @@ ExExFloat UpdateWeight(){
 	}
 	if(i==0) d->CurrentLength=0; else while(n>i){ d->RemoveElement(); n--; }
 	j=0; while(i<=q){ while(eoccupied[j]) j++; d->AddElement(-beta*Energies[j++]); i++; }
-        return d->divdiffs[q] * beta_pow_factorial[q] * currD.real();
+        return d->divdiffs[q] * beta_pow_factorial[q] * REALW(currD);
 }
 
 ExExFloat UpdateWeightReplace(double removeEnergy, double addEnergy){
@@ -141,12 +256,12 @@ ExExFloat UpdateWeightReplace(double removeEnergy, double addEnergy){
 			std::cout << "Error: energy not found" << std::endl; exit(1);
 		}
 	}
-	return d->divdiffs[q] * beta_pow_factorial[q] * currD.real(); // use this value only when the values of q and currD are correct
+	return d->divdiffs[q] * beta_pow_factorial[q] * REALW(currD); // use this value only when the values of q and currD are correct
 }
 
 ExExFloat UpdateWeightDel(double removeEnergy1, double removeEnergy2){
 	if(d->RemoveValue(-beta*removeEnergy1) && d->RemoveValue(-beta*removeEnergy2))
-		return d->divdiffs[q] * beta_pow_factorial[q] * currD.real();  // use this value only when the values of q and currD are correct
+		return d->divdiffs[q] * beta_pow_factorial[q] * REALW(currD);  // use this value only when the values of q and currD are correct
 	else{
 		std::cout << "Error: energy not found" << std::endl; exit(1);
 	}
@@ -154,7 +269,7 @@ ExExFloat UpdateWeightDel(double removeEnergy1, double removeEnergy2){
 
 ExExFloat UpdateWeightIns(double addEnergy1, double addEnergy2){
 	d->AddElement(-beta*addEnergy1); d->AddElement(-beta*addEnergy2);
-	return d->divdiffs[q] * beta_pow_factorial[q] * currD.real();    // use this value only when the values of q and currD are correct
+	return d->divdiffs[q] * beta_pow_factorial[q] * REALW(currD);    // use this value only when the values of q and currD are correct
 }
 
 int NoRepetitionCheck(int* sequence, int r){ // check for absence of repetitions in a sequence of length r
@@ -183,12 +298,25 @@ int FindCycles(int r){  // find all cycles of length between lmin and lmax, each
 	} else return -1;
 }
 
-unsigned int rng_seed;
+void init_rng(){
+#ifdef EXACTLY_REPRODUCIBLE
+	rng_seed = 1000 + mpi_rank;
+#else
+	rng_seed = rd();
+#endif
+	rng.seed(rng_seed);
+}
+
+void init_basic(){
+	double curr2=1; ExExFloat curr1; beta_pow_factorial[0] = curr1; factorial[0] = curr2;
+	for(int k=1;k<qmax;k++){ curr1*=(-double(beta))/k; curr2*=k; beta_pow_factorial[k] = curr1; factorial[k] = curr2;}
+	zero -= zero; currWeight = GetWeight();
+}
 
 void init(){
 	int i,j; double curr2=1; ExExFloat curr1; beta_pow_factorial[0] = curr1; factorial[0] = curr2;
 	for(q=1;q<qmax;q++){ curr1*=(-double(beta))/q; curr2*=q; beta_pow_factorial[q] = curr1; factorial[q] = curr2;}
-	rng_seed = rd(); rng.seed(rng_seed); zero -= zero;
+	zero -= zero;
 	lattice = 0; for(i=N-1;i>=0;i--) if(dice2(rng)) lattice.set(i); z = lattice; q=0;
 	currWeight = GetWeight();
 	for(i=0;i<Ncycles;i++) cycle_len[i] = cycles[i].count();
@@ -229,6 +357,7 @@ double Metropolis(ExExFloat newWeight){
 }
 
 void update(){
+	if(save_data_flag){ save_QMC_data(); exit(0); };
 	int i,m,p,r,u,oldq,cont; double oldE, oldE2, v = Nop>0 ? val(rng) : 1; ExExFloat newWeight; double Rfactor;
 	if(v < 0.8){ // composite update
 		Rfactor = 1; oldq = q; memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(cycles_used_backup,cycles_used,Ncycles*sizeof(int));
@@ -243,7 +372,7 @@ void update(){
 						p = Sq[m]; Sq[m] = Sq[m+1]; Sq[m+1] = p;
 						GetEnergies();
 						newWeight = UpdateWeightReplace(oldE,Energies[m+1]);
-						if(currD.real() == 0) cont = 1;
+						if(REALW(currD) == 0) cont = 1;
 					}
 				}
 			} else if(v < 0.5){ // attempt to delete Sq[m] and Sq[m+1]
@@ -254,7 +383,7 @@ void update(){
 						for(i=m;i<q-2;i++) Sq[i] = Sq[i+2]; q-=2;
 						GetEnergies(); Rfactor /= Nop;
 						newWeight = UpdateWeightDel(oldE,oldE2);
-						if(currD.real() == 0) cont = 1;
+						if(REALW(currD) == 0) cont = 1;
 					}
 				}
 			} else if(v < 0.75){
@@ -264,7 +393,7 @@ void update(){
 					for(i=q-1;i>=m;i--) Sq[i+2] = Sq[i]; q+=2; Sq[m] = Sq[m+1] = p;
 					GetEnergies(); Rfactor *= Nop;
 					newWeight = UpdateWeightIns(Energies[m],Energies[m+1]);
-					if(currD.real() == 0) cont = 1;
+					if(REALW(currD) == 0) cont = 1;
 				} else qmax_achieved = 1;
 			} else{ // attempting a fundamental cycle completion
 				int j = 0, inv_pr; double wfactor;
@@ -293,14 +422,18 @@ void update(){
 								wfactor *= inv_pr; inv_pr = min(rmax,q-u)-(rmin)+1; wfactor /= inv_pr;
 								Rfactor *= wfactor;
 								cycles_used[m] = 1;
-								if(currD.real() == 0) cont = 1;
+								if(REALW(currD) == 0) cont = 1;
 							} else qmax_achieved = 1;
 						}
 					}
 				}
 			}
-		} while(cont && val(rng) < 0.1);
-		if(currD.real() != 0 && val(rng) < Metropolis(newWeight*Rfactor)){
+		} while(cont &&
+#ifdef HURRY_ON_SIGTERM
+			!save_data_flag &&
+#endif
+			val(rng) > COMPOSITE_UPDATE_BREAK_PROBABILITY);
+		if(REALW(currD) != 0 && val(rng) < Metropolis(newWeight*Rfactor)){
 			currWeight = newWeight;
 		} else{
 			q = oldq;
@@ -328,9 +461,6 @@ void update(){
 			else { lattice.flip(p); currWeight = UpdateWeight();}
 	}
 }
-
-double meanq = 0;
-double maxq = 0;
 
 #ifdef MEASURE_CUSTOM_OBSERVABLES
 
@@ -419,7 +549,11 @@ double measure_observable(int n){
 				        (beta_pow_factorial[q-len]/beta_pow_factorial[q]).get_double()/factorial[len] *
 					(currD_partial[q-len]/currD) * calc_MD(n,k);
 			}
-			R = (currD*T).real()/currD.real(); // we importance-sample Re(W_C A_C)/Re(W_C)
+#ifdef ABS_WEIGHTS
+			R = std::abs(T)*currWeight.sgn()*cos(std::arg(T)+std::arg(currD));
+#else
+			R = std::real(currD*T)/std::real(currD); // we importance-sample Re(W_C A_C)/Re(W_C)
+#endif
 #endif
 		} else  switch(n-Nobservables){
 				case 0:	R = measure_H(); break;
@@ -436,7 +570,12 @@ double measure_observable(int n){
 
 void measure(){
 	double R, sgn; int i;
-	currWeight = GetWeight(); sgn = currWeight.sgn();
+	currWeight = GetWeight();
+#ifdef ABS_WEIGHTS
+	sgn = currWeight.sgn() * cos(std::arg(currD)); // arg(W) = arg(currD) + arg(currWeight), where arg(currWeight) = either 0 or Pi
+#else
+	sgn = currWeight.sgn();
+#endif
 	meanq += q; if(maxq < q) maxq = q; in_bin_sum_sgn += sgn;
 	if((measurement_step+1) % bin_length == 0){
 		in_bin_sum_sgn /= bin_length; bin_mean_sgn[measurement_step/bin_length] = in_bin_sum_sgn; in_bin_sum_sgn = 0;

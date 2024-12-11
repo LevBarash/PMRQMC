@@ -14,19 +14,27 @@
 #include"mainQMC.hpp"
 #include<mpi.h>
 
-int mpi_rank, mpi_size;
 double start_time, elapsed_time;
 double mean_O[N_all_observables]; double stdev_O[N_all_observables];
 double sgn_mean, sgn_variance, sgn_stdev;
+void signalHandler(int signum){	if(save_data_flag==0) save_data_flag = 1; }
 
 void compute(){
 	start_time = MPI_Wtime(); 
-	divdiff dd(q+4,500); d=&dd; init();
-	std::cout << "Starting calculation for MPI process No. " << mpi_rank << ", RNG seed = " << rng_seed << std::endl; fflush(stdout);
-	for(step=0;step<Tsteps;step++) update();
-	for(measurement_step=0;measurement_step<measurements;measurement_step++){
+	if(!resume_calc) std::cout << "Starting calculation for MPI process No. " << mpi_rank << ", RNG seed = " << rng_seed << std::endl; fflush(stdout);
+	if(TstepsFinished){
+		if(step>0 && step<stepsPerMeasurement && measurement_step<measurements){
+			for(;step<stepsPerMeasurement;step++) update(); measure(); measurement_step++;
+		}
+	} else{
+		for(;step<Tsteps;step++) update(); TstepsFinished = 1;
+	}
+	for(;measurement_step<measurements;measurement_step++){
 		for(step=0;step<stepsPerMeasurement;step++) update(); measure();
 	}
+#ifdef SAVE_COMPLETED_CALCULATION
+	save_QMC_data(0);
+#endif
 	meanq /= measurements;
 	elapsed_time = MPI_Wtime()-start_time;
 	std::cout << "Calculation completed for MPI process No. " << mpi_rank
@@ -72,6 +80,9 @@ double gathered_bin_mean_sgn[Nbins];
 double gathered_bin_mean[Nbins];
 
 int main(int argc, char* argv[]){
+#ifdef SAVE_UNFINISHED_CALCULATION
+	signal(SIGTERM,signalHandler);
+#endif
 	int i, k, o=0; divdiff_init();
 	MPI_Init(&argc,&argv);
 	MPI_Comm_rank(MPI_COMM_WORLD,&mpi_rank);
@@ -84,6 +95,13 @@ int main(int argc, char* argv[]){
 		std::cout << "Error: no particles found. At least one particle must be described by the Hamiltonian." << std::endl;
 		MPI_Finalize(); exit(1);
 	}
+
+	if(mpi_rank == 0) resume_calc = check_QMC_data();
+	MPI_Barrier(MPI_COMM_WORLD);
+	MPI_Bcast(&resume_calc,1,MPI_INT,0,MPI_COMM_WORLD); init_rng();
+	divdiff dd(q+4,500); d=&dd;
+	if(resume_calc){ load_QMC_data(); init_basic(); } else init();
+	MPI_Barrier(MPI_COMM_WORLD);
 	compute(); process_single_run();
 	MPI_Barrier(MPI_COMM_WORLD);
 	if(mpi_rank == 0){

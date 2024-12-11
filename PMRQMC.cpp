@@ -14,8 +14,12 @@
 #include"mainQMC.hpp"
 
 double get_cpu_time(){ return (double)clock() / CLOCKS_PER_SEC;}
+void signalHandler(int signum){	if(save_data_flag==0) save_data_flag = 1; }
 
 int main(int argc, char* argv[]){
+#ifdef SAVE_UNFINISHED_CALCULATION
+	signal(SIGTERM,signalHandler);
+#endif
 	if(steps < Nbins*stepsPerMeasurement){
 		std::cout << "Error: steps cannot be smaller than Nbins*stepsPerMeasurement." << std::endl;
 		exit(1);
@@ -28,13 +32,26 @@ int main(int argc, char* argv[]){
 	double Rsum[N_all_observables] = {0}; double sgn_sum = 0;
 	double over_bins_sum[N_all_observables] = {0}; double over_bins_sum_sgn = 0;
 	double over_bins_sum_cov[N_all_observables] = {0}; double mean[N_all_observables]; double stdev[N_all_observables];
-	int i,k,o=0; divdiff_init(); divdiff dd(q+4,500); d=&dd; init();
-	std::cout << "RNG seed = " << rng_seed << std::endl;
+	int i,k,o=0; divdiff_init(); divdiff dd(q+4,500); d=&dd; init_rng();
+	if(check_QMC_data()){
+		load_QMC_data(); init_basic();
+	} else{
+		init();	std::cout << "RNG seed = " << rng_seed << std::endl;
+	}
 	std::cout << "Parameters: beta = " << beta << ", Tsteps = " << Tsteps << ", steps = " << steps << std::endl;
-	for(step=0;step<Tsteps;step++) update();
-	for(measurement_step=0;measurement_step<measurements;measurement_step++){
+	if(TstepsFinished){
+		if(step>0 && step<stepsPerMeasurement && measurement_step<measurements){
+			for(;step<stepsPerMeasurement;step++) update(); measure(); measurement_step++;
+		}
+	} else{
+		for(;step<Tsteps;step++) update(); TstepsFinished = 1;
+	}
+	for(;measurement_step<measurements;measurement_step++){
 		for(step=0;step<stepsPerMeasurement;step++) update(); measure();
 	}
+#ifdef SAVE_COMPLETED_CALCULATION
+	save_QMC_data(0);
+#endif
 	for(i=0;i<Nbins;i++) sgn_sum += bin_mean_sgn[i]; sgn_sum /= Nbins;
 	for(i=0;i<Nbins;i++) over_bins_sum_sgn += (bin_mean_sgn[i] - sgn_sum)*(bin_mean_sgn[i] - sgn_sum); over_bins_sum_sgn /= (Nbins*(Nbins-1));
 	std::cout << std::setprecision(9);
