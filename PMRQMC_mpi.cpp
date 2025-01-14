@@ -15,12 +15,12 @@
 #include<mpi.h>
 
 double start_time, elapsed_time;
-double mean_O[N_all_observables]; double stdev_O[N_all_observables];
+double mean_derived_O[N_derived_observables], stdev_derived_O[N_derived_observables], jackknife_O[N_derived_observables], jackknife_sum[N_derived_observables], sgn_meanJ, sgn_varianceJ;
 double sgn_mean, sgn_variance, sgn_stdev;
 void signalHandler(int signum){	if(save_data_flag==0) save_data_flag = 1; }
 
 void compute(){
-	start_time = MPI_Wtime(); 
+	start_time = MPI_Wtime();
 	if(!resume_calc) std::cout << "Starting calculation for MPI process No. " << mpi_rank << ", RNG seed = " << rng_seed << std::endl; fflush(stdout);
 	if(TstepsFinished){
 		if(step>0 && step<stepsPerMeasurement && measurement_step<measurements){
@@ -42,7 +42,7 @@ void compute(){
 }
 
 void process_single_run(){
-	double Rsum[N_all_observables] = {0}; sgn_mean = 0; int i,k;
+	double Rsum[N_all_observables] = {0}; sgn_mean = 0; int i,j,k,o;
 	double over_bins_sum[N_all_observables] = {0}; sgn_variance = 0;
 	double over_bins_sum_cov[N_all_observables] = {0};
 	for(i=0;i<Nbins;i++) sgn_mean += bin_mean_sgn[i]; sgn_mean /= Nbins;
@@ -51,9 +51,29 @@ void process_single_run(){
 		for(i=0;i<Nbins;i++) Rsum[k] += bin_mean[k][i]; Rsum[k] /= Nbins;
 		for(i=0;i<Nbins;i++) over_bins_sum[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean[k][i] - Rsum[k]); over_bins_sum[k] /= (Nbins*(Nbins-1));
 		for(i=0;i<Nbins;i++) over_bins_sum_cov[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean_sgn[i] - sgn_mean); over_bins_sum_cov[k] /= (Nbins*(Nbins-1));
-		mean_O[k] = Rsum[k]/sgn_mean*(1 + sgn_variance/sgn_mean/sgn_mean) - over_bins_sum_cov[k]/sgn_mean/sgn_mean;
+		mean_O_backup[k] = mean_O[k] = Rsum[k]/sgn_mean*(1 + sgn_variance/sgn_mean/sgn_mean) - over_bins_sum_cov[k]/sgn_mean/sgn_mean;
 		stdev_O[k] = fabs(Rsum[k]/sgn_mean)*sqrt(over_bins_sum[k]/Rsum[k]/Rsum[k] + sgn_variance/sgn_mean/sgn_mean - 2*over_bins_sum_cov[k]/Rsum[k]/sgn_mean);
 	}
+	for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o)){
+		mean_derived_O[o] = compute_derived_observable(o); jackknife_sum[o] = 0;
+	}
+	for(j=0;j<Nbins;j++){
+		sgn_meanJ = sgn_varianceJ = 0;
+		for(i=0;i<Nbins;i++) if(i!=j) sgn_meanJ += bin_mean_sgn[i]; sgn_meanJ /= (Nbins-1);
+		for(i=0;i<Nbins;i++) if(i!=j) sgn_varianceJ += (bin_mean_sgn[i] - sgn_meanJ)*(bin_mean_sgn[i] - sgn_meanJ); sgn_varianceJ /= ((Nbins-1)*(Nbins-2));
+		for(k=0;k<N_all_observables;k++) if(valid_observable[k]){
+			Rsum[k] = over_bins_sum_cov[k] = 0;
+			for(i=0;i<Nbins;i++) if(i!=j) Rsum[k] += bin_mean[k][i]; Rsum[k] /= (Nbins-1);
+			for(i=0;i<Nbins;i++) if(i!=j) over_bins_sum_cov[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean_sgn[i] - sgn_meanJ); over_bins_sum_cov[k] /= ((Nbins-1)*(Nbins-2));
+			mean_O[k] = Rsum[k]/sgn_meanJ*(1 + sgn_varianceJ/sgn_meanJ/sgn_meanJ) - over_bins_sum_cov[k]/sgn_meanJ/sgn_meanJ;
+		}
+		for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o)){
+			jackknife_O[o] = compute_derived_observable(o);
+			jackknife_sum[o] += (jackknife_O[o] - mean_derived_O[o])*(jackknife_O[o] - mean_derived_O[o]);
+		}
+	}
+	for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o)) stdev_derived_O[o] = sqrt(jackknife_sum[o]*(Nbins-1)/Nbins);
+	for(k=0;k<N_all_observables;k++) if(valid_observable[k]) mean_O[k] = mean_O_backup[k];
 }
 
 void printout_single_run(){
@@ -69,6 +89,11 @@ void printout_single_run(){
 		std::cout << "mean(O) = " << mean_O[k] << std::endl;
 		std::cout << "std.dev.(O) = " << stdev_O[k] << std::endl;
 	}
+	for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o)){
+		std::cout << "Derived observable: " << name_of_derived_observable(o) << std::endl;
+		std::cout << "mean(O) = " << mean_derived_O[o] << std::endl;
+		std::cout << "std.dev.(O) = " << stdev_derived_O[o] << std::endl;
+	}
 	std::cout << "Elapsed cpu time = " << elapsed_time << " seconds" << std::endl;
 }
 
@@ -77,13 +102,13 @@ double gathered_elapsed_time;
 double gathered_meanq;
 double gathered_maxq;
 double gathered_bin_mean_sgn[Nbins];
-double gathered_bin_mean[Nbins];
+double gathered_bin_mean[N_all_observables][Nbins];
 
 int main(int argc, char* argv[]){
 #ifdef SAVE_UNFINISHED_CALCULATION
 	signal(SIGTERM,signalHandler);
 #endif
-	int i, k, o=0; divdiff_init();
+	int i, j, k, o=0; divdiff_init();
 	MPI_Init(&argc,&argv);
 	MPI_Comm_rank(MPI_COMM_WORLD,&mpi_rank);
 	MPI_Comm_size(MPI_COMM_WORLD,&mpi_size);
@@ -99,7 +124,8 @@ int main(int argc, char* argv[]){
 	if(mpi_rank == 0) resume_calc = check_QMC_data();
 	MPI_Barrier(MPI_COMM_WORLD);
 	MPI_Bcast(&resume_calc,1,MPI_INT,0,MPI_COMM_WORLD); init_rng();
-	divdiff dd(q+4,500); d=&dd;
+	divdiff dd(q+4,500); divdiff ddfs(q+4,500); divdiff dd1(q+4,500); divdiff dd2(q+4,500); 
+	d=&dd; dfs=&ddfs; ds1=&dd1; ds2=&dd2;
 	if(resume_calc){ load_QMC_data(); init_basic(); } else init();
 	MPI_Barrier(MPI_COMM_WORLD);
 	compute(); process_single_run();
@@ -139,6 +165,19 @@ int main(int argc, char* argv[]){
 				if(gathered_stdev >= 0.7 * std_mean) std::cout << ": test passed" << std::endl; else std::cout << ": test failed" << std::endl;
 			}
 		}
+		for(k=0;k<N_derived_observables;k++) if(valid_derived_observable(k)){
+			MPI_Gather(&mean_derived_O[k],1,MPI_DOUBLE,gathered_mean,1,MPI_DOUBLE,0,MPI_COMM_WORLD);
+			MPI_Reduce(&stdev_derived_O[k],&gathered_stdev,1,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+			if(mpi_rank == 0){
+				std::cout << "Derived observable: "<< name_of_derived_observable(k);
+				mean_mean = std_mean = 0; gathered_stdev /= mpi_size;
+				for(i=0;i<mpi_size;i++) mean_mean += gathered_mean[i]; mean_mean /= mpi_size;
+				for(i=0;i<mpi_size;i++) std_mean += (gathered_mean[i] - mean_mean)*(gathered_mean[i] - mean_mean);
+				std_mean /= (mpi_size - 1); std_mean = sqrt(std_mean);
+				std::cout << ", mean of std.dev.(O) = " << gathered_stdev << ", std.dev. of mean(O) = " << std_mean;
+				if(gathered_stdev >= 0.7 * std_mean) std::cout << ": test passed" << std::endl; else std::cout << ": test failed" << std::endl;
+			}
+		}
 		delete[] gathered_mean; if(mpi_rank == 0) std::cout << std::endl;
 	}
 	if(mpi_rank == 0) std::cout << "Collecting statistics and finalizing the calculation" << std::endl << std::endl;
@@ -164,18 +203,42 @@ int main(int argc, char* argv[]){
 		std::cout << "Total std.dev.(sgn(W)) = " << sqrt(sgn_variance) << std::endl;
 	}
 	for(k=0;k<N_all_observables;k++) if(valid_observable[k]){
-		MPI_Reduce(bin_mean[k],gathered_bin_mean,Nbins,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+		MPI_Reduce(bin_mean[k],gathered_bin_mean[k],Nbins,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 		if(mpi_rank == 0){
 			std::cout << "Total of observable #" << ++o << ": "<< name_of_observable(k) << std::endl;
-			for(i=0;i<Nbins;i++) gathered_bin_mean[i] /= mpi_size;
-			for(i=0;i<Nbins;i++) Rsum[k] += gathered_bin_mean[i]; Rsum[k] /= Nbins;
-			for(i=0;i<Nbins;i++) over_bins_sum[k] += (gathered_bin_mean[i] - Rsum[k])*(gathered_bin_mean[i] - Rsum[k]); over_bins_sum[k] /= (Nbins*(Nbins-1));
-			for(i=0;i<Nbins;i++) over_bins_sum_cov[k] += (gathered_bin_mean[i] - Rsum[k])*(gathered_bin_mean_sgn[i] - sgn_mean); over_bins_sum_cov[k] /= (Nbins*(Nbins-1));
+			for(i=0;i<Nbins;i++) gathered_bin_mean[k][i] /= mpi_size;
+			for(i=0;i<Nbins;i++) Rsum[k] += gathered_bin_mean[k][i]; Rsum[k] /= Nbins;
+			for(i=0;i<Nbins;i++) over_bins_sum[k] += (gathered_bin_mean[k][i] - Rsum[k])*(gathered_bin_mean[k][i] - Rsum[k]); over_bins_sum[k] /= (Nbins*(Nbins-1));
+			for(i=0;i<Nbins;i++) over_bins_sum_cov[k] += (gathered_bin_mean[k][i] - Rsum[k])*(gathered_bin_mean_sgn[i] - sgn_mean); over_bins_sum_cov[k] /= (Nbins*(Nbins-1));
 			mean_O[k] = Rsum[k]/sgn_mean*(1 + sgn_variance/sgn_mean/sgn_mean) - over_bins_sum_cov[k]/sgn_mean/sgn_mean;
 			stdev_O[k] = fabs(Rsum[k]/sgn_mean)*sqrt(over_bins_sum[k]/Rsum[k]/Rsum[k] + sgn_variance/sgn_mean/sgn_mean - 2*over_bins_sum_cov[k]/Rsum[k]/sgn_mean);
 			std::cout << "Total mean(O) = " << mean_O[k] << std::endl;
 			std::cout << "Total std.dev.(O) = " << stdev_O[k] << std::endl;
 		}
+	}
+	for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o) && mpi_rank == 0){
+		mean_derived_O[o] = compute_derived_observable(o); jackknife_sum[o] = 0;
+	}
+	if(mpi_rank == 0) for(j=0;j<Nbins;j++){
+		sgn_meanJ = sgn_varianceJ = 0;
+		for(i=0;i<Nbins;i++) if(i!=j) sgn_meanJ += gathered_bin_mean_sgn[i]; sgn_meanJ /= (Nbins-1);
+		for(i=0;i<Nbins;i++) if(i!=j) sgn_varianceJ += (gathered_bin_mean_sgn[i] - sgn_meanJ)*(gathered_bin_mean_sgn[i] - sgn_meanJ); sgn_varianceJ /= ((Nbins-1)*(Nbins-2));
+		for(k=0;k<N_all_observables;k++) if(valid_observable[k]){
+			Rsum[k] = over_bins_sum_cov[k] = 0;
+			for(i=0;i<Nbins;i++) if(i!=j) Rsum[k] += gathered_bin_mean[k][i]; Rsum[k] /= (Nbins-1);
+			for(i=0;i<Nbins;i++) if(i!=j) over_bins_sum_cov[k] += (gathered_bin_mean[k][i] - Rsum[k])*(gathered_bin_mean_sgn[i] - sgn_meanJ); over_bins_sum_cov[k] /= ((Nbins-1)*(Nbins-2));
+			mean_O[k] = Rsum[k]/sgn_meanJ*(1 + sgn_varianceJ/sgn_meanJ/sgn_meanJ) - over_bins_sum_cov[k]/sgn_meanJ/sgn_meanJ;
+		}
+		for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o)){
+			jackknife_O[o] = compute_derived_observable(o);
+			jackknife_sum[o] += (jackknife_O[o] - mean_derived_O[o])*(jackknife_O[o] - mean_derived_O[o]);
+		}
+	}
+	for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o) && mpi_rank == 0){
+		stdev_derived_O[o] = sqrt(jackknife_sum[o]*(Nbins-1)/Nbins);
+		std::cout << "Total of derived observable: " << name_of_derived_observable(o) << std::endl;
+		std::cout << "Total mean(O) = " << mean_derived_O[o] << std::endl;
+		std::cout << "Total std.dev.(O) = " << stdev_derived_O[o] << std::endl;
 	}
 	if(mpi_rank == 0){
 		std::cout << "Total elapsed cpu time = " << gathered_elapsed_time << " seconds" << std::endl;

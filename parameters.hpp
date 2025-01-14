@@ -26,6 +26,7 @@
 #define MEASURE_HOFFDIAG             // <H_{offdiag}>   is measured when this line is not commented
 #define MEASURE_HOFFDIAG2            // <H_{offdiag}^2> is measured when this line is not commented
 // #define MEASURE_Z_MAGNETIZATION      // Z-magnetization is measured when this line is not commented
+// #define MEASURE_Z_MAGNETIZATION2     // Z-magnetization^2 is measured when this line is not commented
 
 //
 // Below are the implementation parameters:
@@ -46,5 +47,5 @@
 
 // #define SAVE_COMPLETED_CALCULATION   // save detailed data to "qmc_data_*.dat" when calculaiton is completed
 // #define SAVE_UNFINISHED_CALCULATION  // save calculation state to the files "qmc_data_*.dat" prior to exiting when SIGTERM signal is detected
-// #define HURRY_ON_SIGTERM             // uncomment this line to break composite update on SIGTERM signal to speed up the process
 // #define RESUME_CALCULATION           // attempt to read data from "qmc_data_*.dat" to resume the previous calculation
+// #define HURRY_ON_SIGTERM             // break composite update on SIGTERM signal to speed up saving data; this is usually not necessary

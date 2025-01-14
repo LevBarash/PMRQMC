@@ -57,7 +57,7 @@ int cycle_min_len, cycle_max_len, found_cycles, min_index, max_index;
 #define Nobservables 0
 #endif
 
-const int N_all_observables = Nobservables + 7;
+const int N_all_observables = Nobservables + 8;
 int valid_observable[N_all_observables];
 
 unsigned long long bin_length = measurements / Nbins, bin_length_old;
@@ -69,7 +69,7 @@ double bin_mean_sgn[Nbins];
 int q;
 int qmax_achieved=0;
 
-divdiff* d;
+divdiff *d, *dfs, *ds1, *ds2;
 
 std::bitset<N> lattice;
 std::bitset<N> z;
@@ -350,6 +350,9 @@ void init(){
 #ifdef MEASURE_Z_MAGNETIZATION
 	valid_observable[Nobservables + 6] = 1;
 #endif
+#ifdef MEASURE_Z_MAGNETIZATION2
+	valid_observable[Nobservables + 7] = 1;
+#endif
 }
 
 double Metropolis(ExExFloat newWeight){
@@ -513,7 +516,12 @@ double measure_Hoffdiag2(){
 }
 
 double measure_Z_magnetization(){
-	return (2.0*lattice.count() - N)/N;
+	return (2.0*lattice.count() - N)/N; // this value is between -1 and 1
+}
+
+double measure_Z_magnetization2(){
+	double m = measure_Z_magnetization();
+	return m*m;
 }
 
 std::string name_of_observable(int n){
@@ -530,6 +538,7 @@ std::string name_of_observable(int n){
 			case 4: s = "H_{offdiag}";   break;
 			case 5: s = "H_{offdiag}^2"; break;
 			case 6: s = "Z_magnetization"; break;
+			case 7: s = "Z_magnetization^2"; break;
 	}
 	return s;
 }
@@ -563,6 +572,7 @@ double measure_observable(int n){
 				case 4:	R = measure_Hoffdiag(); break;
 				case 5:	R = measure_Hoffdiag2(); break;
 				case 6: R = measure_Z_magnetization(); break;
+				case 7: R = measure_Z_magnetization2(); break;
 		}
 	}
 	return R;
@@ -586,4 +596,35 @@ void measure(){
 			in_bin_sum[i] /= bin_length; bin_mean[i][measurement_step/bin_length] = in_bin_sum[i]; in_bin_sum[i] = 0;
 		}
 	}
+}
+
+double mean_O[N_all_observables], stdev_O[N_all_observables], mean_O_backup[N_all_observables];
+
+const int N_derived_observables = 2;  // we define number of derived observables
+
+std::string name_of_derived_observable(int n){ // we define names of derived observables
+	std::string s;
+	switch(n){
+		case 0 : s = "specific heat"; break;
+		case 1 : s = "magnetic susceptibility"; break;
+	}
+	return s;
+}
+
+int valid_derived_observable(int n){ // we define which observables are needed for each derived observable
+	int r = 0;
+	switch(n){
+		case 0: r = valid_observable[Nobservables+0] && valid_observable[Nobservables+1]; break;
+		case 1: r = valid_observable[Nobservables+6] && valid_observable[Nobservables+7]; break;
+	}
+	return r;
+}
+
+double compute_derived_observable(int n){ // we compute the derived observables
+	double R = 0;
+	switch(n){
+		case 0 : R = beta*beta*(mean_O[Nobservables+1] - mean_O[Nobservables+0]*mean_O[Nobservables+0]); break;
+		case 1 : R = beta*(mean_O[Nobservables+7] - mean_O[Nobservables+6]*mean_O[Nobservables+6]); break;
+	}
+	return R;
 }

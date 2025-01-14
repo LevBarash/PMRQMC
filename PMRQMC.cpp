@@ -29,10 +29,10 @@ int main(int argc, char* argv[]){
 		exit(1);
 	}
 	double start_time = get_cpu_time();
-	double Rsum[N_all_observables] = {0}; double sgn_sum = 0;
-	double over_bins_sum[N_all_observables] = {0}; double over_bins_sum_sgn = 0;
-	double over_bins_sum_cov[N_all_observables] = {0}; double mean[N_all_observables]; double stdev[N_all_observables];
-	int i,k,o=0; divdiff_init(); divdiff dd(q+4,500); d=&dd; init_rng();
+	int i,j,k,o=0; 
+	divdiff_init(); divdiff dd(q+4,500); divdiff ddfs(q+4,500); divdiff dd1(q+4,500); divdiff dd2(q+4,500); 
+	d=&dd; dfs=&ddfs; ds1=&dd1; ds2=&dd2;
+	init_rng();
 	if(check_QMC_data()){
 		load_QMC_data(); init_basic();
 	} else{
@@ -52,11 +52,14 @@ int main(int argc, char* argv[]){
 #ifdef SAVE_COMPLETED_CALCULATION
 	save_QMC_data(0);
 #endif
-	for(i=0;i<Nbins;i++) sgn_sum += bin_mean_sgn[i]; sgn_sum /= Nbins;
-	for(i=0;i<Nbins;i++) over_bins_sum_sgn += (bin_mean_sgn[i] - sgn_sum)*(bin_mean_sgn[i] - sgn_sum); over_bins_sum_sgn /= (Nbins*(Nbins-1));
+	double Rsum[N_all_observables] = {0}; double sgn_mean = 0;
+	double over_bins_sum[N_all_observables] = {0}; double sgn_variance = 0;
+	double over_bins_sum_cov[N_all_observables] = {0};
+	for(i=0;i<Nbins;i++) sgn_mean += bin_mean_sgn[i]; sgn_mean /= Nbins;
+	for(i=0;i<Nbins;i++) sgn_variance += (bin_mean_sgn[i] - sgn_mean)*(bin_mean_sgn[i] - sgn_mean); sgn_variance /= (Nbins*(Nbins-1));
 	std::cout << std::setprecision(9);
-	std::cout << "mean(sgn(W)) = " << sgn_sum << std::endl;
-	std::cout << "std.dev.(sgn(W)) = " << sqrt(over_bins_sum_sgn) << std::endl;
+	std::cout << "mean(sgn(W)) = " << sgn_mean << std::endl;
+	std::cout << "std.dev.(sgn(W)) = " << sqrt(sgn_variance) << std::endl;
 	if(qmax_achieved) std::cout << std::endl << "Warning: qmax = " << qmax << " was achieved. The results may be incorrect. The qmax parameter should be increased." << std::endl;
 	for(i=0;i<Ncycles;i++) if(!cycles_used[i]) std::cout << "Warning: cycle No. " << i << " of length " << cycle_len[i] << " was not used" << std::endl;
 	std::cout << "mean(q) = " << meanq / measurements << std::endl;
@@ -65,11 +68,36 @@ int main(int argc, char* argv[]){
 		std::cout << "Observable #" << ++o << ": "<< name_of_observable(k) << std::endl;
 		for(i=0;i<Nbins;i++) Rsum[k] += bin_mean[k][i]; Rsum[k] /= Nbins;
 		for(i=0;i<Nbins;i++) over_bins_sum[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean[k][i] - Rsum[k]); over_bins_sum[k] /= (Nbins*(Nbins-1));
-		for(i=0;i<Nbins;i++) over_bins_sum_cov[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean_sgn[i] - sgn_sum); over_bins_sum_cov[k] /= (Nbins*(Nbins-1));
-		mean[k] = Rsum[k]/sgn_sum*(1 + over_bins_sum_sgn/sgn_sum/sgn_sum) - over_bins_sum_cov[k]/sgn_sum/sgn_sum;
-		stdev[k] = fabs(Rsum[k]/sgn_sum)*sqrt(over_bins_sum[k]/Rsum[k]/Rsum[k] + over_bins_sum_sgn/sgn_sum/sgn_sum - 2*over_bins_sum_cov[k]/Rsum[k]/sgn_sum);
-		std::cout << "mean(O) = " << mean[k] << std::endl;
-		std::cout << "std.dev.(O) = " << stdev[k] << std::endl;
+		for(i=0;i<Nbins;i++) over_bins_sum_cov[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean_sgn[i] - sgn_mean); over_bins_sum_cov[k] /= (Nbins*(Nbins-1));
+		mean_O[k] = Rsum[k]/sgn_mean*(1 + sgn_variance/sgn_mean/sgn_mean) - over_bins_sum_cov[k]/sgn_mean/sgn_mean;
+		stdev_O[k] = fabs(Rsum[k]/sgn_mean)*sqrt(over_bins_sum[k]/Rsum[k]/Rsum[k] + sgn_variance/sgn_mean/sgn_mean - 2*over_bins_sum_cov[k]/Rsum[k]/sgn_mean);
+		std::cout << "mean(O) = " << mean_O[k] << std::endl;
+		std::cout << "std.dev.(O) = " << stdev_O[k] << std::endl;
+	}
+	double mean_derived_O[N_derived_observables], stdev_derived_O[N_derived_observables], jackknife_O[N_derived_observables], jackknife_sum[N_derived_observables], sgn_meanJ, sgn_varianceJ;
+	for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o)){
+		mean_derived_O[o] = compute_derived_observable(o); jackknife_sum[o] = 0;
+	}
+	for(j=0;j<Nbins;j++){
+		sgn_meanJ = sgn_varianceJ = 0;
+		for(i=0;i<Nbins;i++) if(i!=j) sgn_meanJ += bin_mean_sgn[i]; sgn_meanJ /= (Nbins-1);
+		for(i=0;i<Nbins;i++) if(i!=j) sgn_varianceJ += (bin_mean_sgn[i] - sgn_meanJ)*(bin_mean_sgn[i] - sgn_meanJ); sgn_varianceJ /= ((Nbins-1)*(Nbins-2));
+		for(k=0;k<N_all_observables;k++) if(valid_observable[k]){
+			Rsum[k] = over_bins_sum_cov[k] = 0;
+			for(i=0;i<Nbins;i++) if(i!=j) Rsum[k] += bin_mean[k][i]; Rsum[k] /= (Nbins-1);
+			for(i=0;i<Nbins;i++) if(i!=j) over_bins_sum_cov[k] += (bin_mean[k][i] - Rsum[k])*(bin_mean_sgn[i] - sgn_meanJ); over_bins_sum_cov[k] /= ((Nbins-1)*(Nbins-2));
+			mean_O[k] = Rsum[k]/sgn_meanJ*(1 + sgn_varianceJ/sgn_meanJ/sgn_meanJ) - over_bins_sum_cov[k]/sgn_meanJ/sgn_meanJ;
+		}
+		for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o)){
+			jackknife_O[o] = compute_derived_observable(o);
+			jackknife_sum[o] += (jackknife_O[o] - mean_derived_O[o])*(jackknife_O[o] - mean_derived_O[o]);
+		}
+	}
+	for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o)) stdev_derived_O[o] = sqrt(jackknife_sum[o]*(Nbins-1)/Nbins);
+	for(o=0;o<N_derived_observables;o++) if(valid_derived_observable(o)){
+		std::cout << "Derived observable: " << name_of_derived_observable(o) << std::endl;
+		std::cout << "mean(O) = " << mean_derived_O[o] << std::endl;
+		std::cout << "std.dev.(O) = " << stdev_derived_O[o] << std::endl;
 	}
 	divdiff_clear_up();
 	std::cout << "wall-clock cpu time = " << get_cpu_time()-start_time << " seconds" << std::endl;
