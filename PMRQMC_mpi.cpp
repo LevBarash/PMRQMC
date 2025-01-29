@@ -14,13 +14,12 @@
 #include"mainQMC.hpp"
 #include<mpi.h>
 
-double start_time, elapsed_time;
+double elapsed_time;
 double mean_derived_O[N_derived_observables], stdev_derived_O[N_derived_observables], jackknife_O[N_derived_observables], jackknife_sum[N_derived_observables], sgn_meanJ, sgn_varianceJ;
 double sgn_mean, sgn_variance, sgn_stdev;
 void signalHandler(int signum){	if(save_data_flag==0) save_data_flag = 1; }
 
 void compute(){
-	start_time = MPI_Wtime();
 	if(!resume_calc) std::cout << "Starting calculation for MPI process No. " << mpi_rank << ", RNG seed = " << rng_seed << std::endl; fflush(stdout);
 	if(TstepsFinished){
 		if(step>0 && step<stepsPerMeasurement && measurement_step<measurements){
@@ -120,12 +119,12 @@ int main(int argc, char* argv[]){
 		std::cout << "Error: no particles found. At least one particle must be described by the Hamiltonian." << std::endl;
 		MPI_Finalize(); exit(1);
 	}
-
 	if(mpi_rank == 0) resume_calc = check_QMC_data();
 	MPI_Barrier(MPI_COMM_WORLD);
 	MPI_Bcast(&resume_calc,1,MPI_INT,0,MPI_COMM_WORLD); init_rng();
 	divdiff dd(q+4,500); divdiff ddfs(q+4,500); divdiff dd1(q+4,500); divdiff dd2(q+4,500); 
 	d=&dd; dfs=&ddfs; ds1=&dd1; ds2=&dd2;
+	start_time = MPI_Wtime();
 	if(resume_calc){ load_QMC_data(); init_basic(); } else init();
 	MPI_Barrier(MPI_COMM_WORLD);
 	compute(); process_single_run();

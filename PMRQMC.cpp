@@ -28,8 +28,12 @@ int main(int argc, char* argv[]){
 		std::cout << "Error: no particles found. At least one particle must be described by the Hamiltonian." << std::endl;
 		exit(1);
 	}
-	double start_time = get_cpu_time();
-	int i,j,k,o=0; 
+	start_time = get_cpu_time(); int i,j,k,o=0;
+	if(argc > 1){
+		mpi_rank = std::stoi(argv[1]); mpi_size = mpi_rank + 1;
+	} else if(const char* task_id_env = std::getenv("SLURM_ARRAY_TASK_ID")){
+		mpi_rank = std::stoi(task_id_env); mpi_size = mpi_rank + 1;
+	}
 	divdiff_init(); divdiff dd(q+4,500); divdiff ddfs(q+4,500); divdiff dd1(q+4,500); divdiff dd2(q+4,500); 
 	d=&dd; dfs=&ddfs; ds1=&dd1; ds2=&dd2;
 	init_rng();

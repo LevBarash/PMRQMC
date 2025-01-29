@@ -100,6 +100,7 @@ unsigned long long measurement_step = 0;
 unsigned int rng_seed;
 double meanq = 0;
 double maxq = 0;
+double start_time;
 int save_data_flag = 0, mpi_rank = 0, mpi_size = 0, resume_calc = 0;
 
 #define fout(obj) { foutput.write((char *)& obj, sizeof(obj)); }
@@ -108,7 +109,7 @@ int save_data_flag = 0, mpi_rank = 0, mpi_size = 0, resume_calc = 0;
 void save_QMC_data(int printout = 1){
 	if(printout) std::cout<<"SIGTERM signal detected. Saving unfinished calculation...";
 	char fname[100]; if(mpi_size>0) sprintf(fname,"qmc_data_%d.dat",mpi_rank); else sprintf(fname,"qmc_data.dat");
-	std::ofstream foutput(fname,std::ios::binary);
+	std::ofstream foutput(fname,std::ios::binary); double elapsed;
 	fout(rng); fout(bin_length);
 	fout(cycle_len); fout(cycles_used); fout(cycles_used_backup); fout(cycle_min_len); fout(cycle_max_len);
 	fout(found_cycles); fout(min_index); fout(max_index); fout(TstepsFinished);
@@ -118,13 +119,19 @@ void save_QMC_data(int printout = 1){
 	fout(Energies); fout(Energies_backup); fout(eoccupied); fout(currEnergy); fout(valid_observable);
 	fout(currD); fout(old_currD); fout(currD_partial); fout(zero); fout(currWeight); fout(step); fout(measurement_step); 
 	fout(rng_seed); fout(meanq); fout(maxq);
+#ifdef MPI_VERSION
+	elapsed = MPI_Wtime() - start_time;
+#else
+	elapsed = (double)clock() / CLOCKS_PER_SEC - start_time;
+#endif
+	fout(elapsed);
 	foutput.close(); if(printout) std::cout<<"done"<<std::endl; fflush(stdout);
 }
 
 int check_QMC_data(){
 #ifdef RESUME_CALCULATION
 	int i,r,g; char fname[100];
-	if(mpi_size>0){
+	if(mpi_rank==0 && mpi_size>0){
 		r = 1;
 		for(i=0;i<mpi_size;i++){
 			sprintf(fname,"qmc_data_%d.dat",mpi_rank);
@@ -132,7 +139,7 @@ int check_QMC_data(){
 			g = finput.good(); if(g) finput.close(); r = r && g;
 		}
 	} else{
-		sprintf(fname,"qmc_data.dat");
+		if(mpi_size>0) sprintf(fname,"qmc_data_%d.dat",mpi_rank); else sprintf(fname,"qmc_data.dat");
 		std::ifstream finput(fname,std::ios::binary);
 		r = finput.good(); if(r) finput.close();
 	}
@@ -144,7 +151,7 @@ int check_QMC_data(){
 
 void load_QMC_data(){
 	char fname[100]; if(mpi_size>0) sprintf(fname,"qmc_data_%d.dat",mpi_rank); else sprintf(fname,"qmc_data.dat");
-	std::ifstream finput(fname,std::ios::binary);
+	std::ifstream finput(fname,std::ios::binary); double elapsed;
 	if(finput.good()){
 		fin(rng); fin(bin_length_old);
 		fin(cycle_len); fin(cycles_used); fin(cycles_used_backup); fin(cycle_min_len); fin(cycle_max_len);
@@ -154,8 +161,8 @@ void load_QMC_data(){
 		fin(Sq); fin(Sq_backup); fin(Sq_subseq); fin(Sq_gaps);
 		fin(Energies); fin(Energies_backup); fin(eoccupied); fin(currEnergy); fin(valid_observable);
 		fin(currD); fin(old_currD); fin(currD_partial); fin(zero); fin(currWeight); fin(step); fin(measurement_step); 
-		fin(rng_seed); fin(meanq); fin(maxq);
-		finput.close();
+		fin(rng_seed); fin(meanq); fin(maxq); fin(elapsed); if(finput.gcount()==0) elapsed = 0;
+		finput.close(); start_time -= elapsed;
 		if(mpi_size > 0){
 			if(TstepsFinished){
 				std::cout<<"MPI process No. "<< mpi_rank <<" loaded unfinished calculation: all Tsteps completed, main steps completed: "
