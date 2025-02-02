@@ -67,17 +67,20 @@ double in_bin_sum_sgn;
 double bin_mean_sgn[Nbins];
 
 int q;
+int q_saved;
 int qmax_achieved=0;
 
 divdiff *d, *dfs, *ds1, *ds2;
 
 std::bitset<N> lattice;
+std::bitset<N> lattice_backup;
 std::bitset<N> z;
 std::bitset<Nop> P;
 std::bitset<Ncycles> P_in_cycles[Nop];
 
 int Sq[qmax];	// list of q operator indices
 int Sq_backup[qmax];
+int Sq_saved[qmax];
 int Sq_subseq[qmax];
 int Sq_gaps[qmax];
 double Energies[qmax+1];
@@ -92,6 +95,9 @@ std::complex<double> currD_partial[qmax];
 #else
 #define REALW    std::real
 #endif
+
+int distance_from_identity = 0;
+int saved_distance_from_identity;
 
 ExExFloat zero, currWeight; int TstepsFinished = 0;
 unsigned long long step = 0;
@@ -228,6 +234,9 @@ void ApplyOperator(int k){
 }
 
 void GetEnergies(){
+#ifdef WORM_UPDATE
+	z = lattice;
+#endif
 	currD = currD_partial[0] = 1;
 	for(int i=0;i<q;i++){
 		Energies[i] = CalcEnergy();
@@ -235,7 +244,11 @@ void GetEnergies(){
 		currD *= calc_d(Sq[i]);
 		currD_partial[i+1] = currD;
 	}
-	currEnergy = Energies[q] = CalcEnergy();
+	Energies[q] = CalcEnergy(); currEnergy = Energies[0];
+#ifdef WORM_UPDATE
+	lattice ^= z; distance_from_identity = lattice.count();
+	lattice = z;
+#endif
 }
 
 ExExFloat GetWeight(){
@@ -329,7 +342,11 @@ void init(){
 	for(i=0;i<Ncycles;i++) cycle_len[i] = cycles[i].count();
 	cycle_min_len = 64; for(i=0;i<Ncycles;i++) cycle_min_len = min(cycle_min_len,cycle_len[i]);
 	cycle_max_len = 0; for(i=0;i<Ncycles;i++) cycle_max_len = max(cycle_max_len,cycle_len[i]);
+#ifdef WORM_UPDATE
+	for(i=0;i<Ncycles;i++) cycles_used[i] = 1;
+#else
 	for(i=0;i<Ncycles;i++) cycles_used[i] = 0;
+#endif
 	for(i=0;i<Nop;i++) for(j=0;j<Ncycles;j++) if(cycles[j].test(i)) P_in_cycles[i].set(j);
 	for(i=0;i<N_all_observables;i++) in_bin_sum[i] = 0; in_bin_sum_sgn = 0;
 	for(i=0;i<N_all_observables;i++) valid_observable[i] = 0;
@@ -365,6 +382,151 @@ void init(){
 double Metropolis(ExExFloat newWeight){
 	return min(1.0,fabs((newWeight/currWeight).get_double()));
 }
+
+#ifdef WORM_UPDATE
+
+void worm_update(){  // employing worm update in addition to other updates
+	int i,m,p,r,u; double oldE, oldE2, v = Nop>0 ? val(rng) : 1; ExExFloat newWeight;
+	if(v < 0.3){ //local move
+		if(v<0.1 && q>=2){ // attempt to swap Sq[m] and Sq[m+1]
+			m = int(val(rng)*(q-1)); // m is between 0 and (q-2)
+			if(Sq[m]!=Sq[m+1]){
+				oldE = Energies[m+1]; old_currD = currD;
+				p = Sq[m]; Sq[m] = Sq[m+1]; Sq[m+1] = p; GetEnergies(); newWeight = UpdateWeightReplace(oldE,Energies[m+1]);
+				if(val(rng) < Metropolis(newWeight)) currWeight = newWeight; else {
+					Sq[m+1] = Sq[m]; Sq[m] = p; currD = old_currD;
+					UpdateWeightReplace(Energies[m+1],oldE); Energies[m+1] = oldE;
+				}
+			}
+		} else if(v<0.2){ // attempt to delete Sq[m] and Sq[m+1]
+			if(q>=2){
+				m = int(val(rng)*(q-1)); // m is between 0 and (q-2)
+				if(Sq[m]==Sq[m+1]){
+					oldE = Energies[m]; oldE2 = Energies[m+1]; old_currD = currD;
+					memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
+					for(i=m;i<q-2;i++) Sq[i] = Sq[i+2]; q-=2;
+					GetEnergies(); newWeight = UpdateWeightDel(oldE,oldE2);
+					if(val(rng) < Metropolis(newWeight)/Nop) currWeight = newWeight; else{
+						q+=2; memcpy(Sq,Sq_backup,q*sizeof(int)); memcpy(Energies,Energies_backup,(q+1)*sizeof(double));
+						currD = old_currD; UpdateWeightIns(oldE,oldE2);
+					}
+				}
+			}
+		} else{
+			if(q+2<qmax){ // attempt to insert Sq[m] and Sq[m+1]
+				m = int(val(rng)*(q+1)); // m is between 0 and q
+				memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
+				old_currD = currD; p = diceNop(rng);
+				for(i=q-1;i>=m;i--) Sq[i+2] = Sq[i]; q+=2; Sq[m] = Sq[m+1] = p;
+				GetEnergies(); newWeight = UpdateWeightIns(Energies[m],Energies[m+1]);
+				if(val(rng) < Metropolis(newWeight)) currWeight = newWeight; else{
+					q-=2; memcpy(Sq,Sq_backup,q*sizeof(int)); memcpy(Energies,Energies_backup,(q+1)*sizeof(double));
+					currD = old_currD; d->RemoveElement(); d->RemoveElement();
+				}
+			} else qmax_achieved = 1;
+		}
+	} else if(v < 0.4){ // attempt to insert a randomly chosen single permutation operator
+		if(q+1<qmax){
+			saved_distance_from_identity = distance_from_identity;
+			m = int(val(rng)*(q+1)); // m is between 0 and q
+			memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
+			old_currD = currD; p = diceNop(rng);
+			for(i=q-1;i>=m;i--) Sq[i+1] = Sq[i]; q++; Sq[m] = p; newWeight = UpdateWeight();
+			if(saved_distance_from_identity && distance_from_identity && val(rng) < 0.1){
+				q=q_saved; memcpy(Sq,Sq_saved,q_saved*sizeof(int));
+				currWeight = UpdateWeight();
+			} else if(val(rng) < Metropolis(newWeight)){
+				currWeight = newWeight;
+				if(saved_distance_from_identity == 0){
+					memcpy(Sq_saved,Sq_backup,(q-1)*sizeof(int)); q_saved = q-1;
+				}				
+			} else{
+				q--; memcpy(Sq,Sq_backup,q*sizeof(int)); memcpy(Energies,Energies_backup,(q+1)*sizeof(double));
+				currD = old_currD; UpdateWeight();
+			}
+		} else qmax_achieved = 1;
+	} else if(v < 0.5){ // attempt to remove a randomly chosen single permutation operator
+		if(q>0){
+			saved_distance_from_identity = distance_from_identity;
+			m = int(val(rng)*q); p = Sq[m]; // m is between 0 and (q-1)
+			old_currD = currD; memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
+			for(i=m;i<q-1;i++) Sq[i] = Sq[i+1]; q--; newWeight = UpdateWeight();
+			if(saved_distance_from_identity && distance_from_identity && val(rng) < 0.1){
+				q=q_saved; memcpy(Sq,Sq_saved,q_saved*sizeof(int));
+				currWeight = UpdateWeight();
+			} else if(val(rng) < Metropolis(newWeight)/Nop){
+				currWeight = newWeight;
+				if(saved_distance_from_identity == 0){
+					memcpy(Sq_saved,Sq_backup,(q+1)*sizeof(int)); q_saved = q+1;
+				}
+			} else{
+				q++; memcpy(Sq,Sq_backup,q*sizeof(int)); memcpy(Energies,Energies_backup,(q+1)*sizeof(double));
+				currD = old_currD; UpdateWeight();
+			}
+		}
+	} else if(v < 0.6){ // attempting a fundamental cycle completion
+		int oldq, j = 0, inv_pr; double wfactor;
+		u = geometric_int(rng); // a random integer u is picked according to geometric distribution
+		if(q >= u+rmin){
+			inv_pr = min(rmax,q-u)-(rmin)+1;
+			r = int(val(rng)*inv_pr) + (rmin);  // r is random integer between rmin and min(rmax,q-u)
+			PickSubsequence(r+u); // indexes of the subsequence are min_index, min_index+1,..., max_index=min_index+r+u-1
+			std::shuffle(Sq_subseq,Sq_subseq+r+u,rng);
+			if(NoRepetitionCheck(Sq_subseq,r)){
+				for(i=0;i<u;i++) Sq_gaps[i] = Sq_subseq[i+r];
+				m = FindCycles(r);
+				if(found_cycles > 0){ // cycles[m] is one of the found cycles, containing all the operators of Sq_subseq
+					P = cycles[m]; for(i=0;i<r;i++) P.reset(Sq_subseq[i]);
+					p = P.count(); // here, p is length of the complement sequence S'
+					if(q+p-r < qmax){
+						memcpy(Sq_backup,Sq,q*sizeof(int)); oldq = q;
+						if(r<p)	     for(i=q-1;i>max_index;i--) Sq[i+p-r] = Sq[i]; // shift the values to the right
+						else if(r>p) for(i=max_index+1;i<q;i++) Sq[i+p-r] = Sq[i]; // shift the values to the left
+						for(i=0;i<p;i++){ while(!P.test(j)) j++; Sq_subseq[i] = Sq[min_index+i] = j++;}
+						for(i=0;i<u;i++) Sq[min_index+p+i] = Sq_gaps[i]; // S' contains the remaining operators
+						std::shuffle(Sq+min_index,Sq+min_index+p+u,rng);
+						q += p-r; // the length q may have changed
+						newWeight = UpdateWeight();
+						wfactor = found_cycles; FindCycles(p); wfactor /= found_cycles;
+						wfactor *= factorial[p]/factorial[r];
+						wfactor *= inv_pr; inv_pr = min(rmax,q-u)-(rmin)+1; wfactor /= inv_pr;
+						if(val(rng) < Metropolis(newWeight*wfactor)){
+							currWeight = newWeight; cycles_used[m] = 1;
+						} else{
+							q = oldq; memcpy(Sq,Sq_backup,q*sizeof(int)); currWeight = UpdateWeight();
+						}
+					} else qmax_achieved = 1;
+				}
+			}
+		}
+	} else if(v < 0.9){ // attempting a block swap
+		if(q>=2 && distance_from_identity==0){
+			m = q==2 ? 0 : int(val(rng)*(q-1)); // m is between 0 and (q-2)
+			lattice_backup = lattice;
+			oldE = currEnergy; for(i=0;i<=m;i++) ApplyOperator(Sq[i]);
+			for(i=0;i<=m;i++)  Sq_backup[q-1-m+i] = Sq[i];
+			for(i=m+1;i<q;i++) Sq_backup[i-m-1] = Sq[i];
+			for(i=0;i<q;i++) { p = Sq[i]; Sq[i] = Sq_backup[i]; Sq_backup[i] = p;}
+			memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
+			GetEnergies(); newWeight = UpdateWeightReplace(oldE,currEnergy);
+			if(val(rng) < Metropolis(newWeight)) currWeight = newWeight; else{
+				UpdateWeightReplace(currEnergy,oldE); currEnergy = oldE;
+				lattice = lattice_backup; memcpy(Sq,Sq_backup,q*sizeof(int));
+				memcpy(Energies,Energies_backup,(q+1)*sizeof(double));
+			}
+		}
+	} else if(distance_from_identity==0){ // flip of a random spin
+		p = diceN(rng);	lattice.flip(p); newWeight = UpdateWeight();
+		if(val(rng) < Metropolis(newWeight)) currWeight = newWeight;
+			else { lattice.flip(p); currWeight = UpdateWeight();}
+	}
+}
+
+void update(){
+	do worm_update(); while(distance_from_identity);
+}
+
+#else
 
 void update(){
 	if(save_data_flag){ save_QMC_data(); exit(0); };
@@ -471,6 +633,8 @@ void update(){
 			else { lattice.flip(p); currWeight = UpdateWeight();}
 	}
 }
+
+#endif
 
 #ifdef MEASURE_CUSTOM_OBSERVABLES
 

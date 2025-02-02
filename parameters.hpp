@@ -37,6 +37,7 @@
 #define EXHAUSTIVE_CYCLE_SEARCH      // comment this line for a more restrictive cycle search
 #define GAPS_GEOMETRIC_PARAMETER 0.8 // parameter of geometric distribution for the length of gaps in the cycle completion update
 #define COMPOSITE_UPDATE_BREAK_PROBABILITY  0.9   // exit composite update at each step with this probability
+// #define WORM_UPDATE                  // uncomment this line to employ worm update rather than composite update
 
 // #define ABS_WEIGHTS                  // uncomment this line to employ absolute values of weights rather than real parts of weights
 // #define EXACTLY_REPRODUCIBLE         // uncomment this to always employ the same RNG seeds and reproduce exactly the same results
