@@ -385,6 +385,16 @@ double Metropolis(ExExFloat newWeight){
 
 #ifdef WORM_UPDATE
 
+#define WORM_BREAK_PROBABILITY 0.1
+
+int worm_exit_check(){
+	int r = save_data_flag;
+#ifdef WORM_BREAK_PROBABILITY
+	if(val(rng) < WORM_BREAK_PROBABILITY) r = 1;
+#endif
+	return r;
+}
+
 void worm_update(){  // employing worm update in addition to other updates
 	int i,m,p,r,u; double oldE, oldE2, v = Nop>0 ? val(rng) : 1; ExExFloat newWeight;
 	if(v < 0.3){ //local move
@@ -432,7 +442,7 @@ void worm_update(){  // employing worm update in addition to other updates
 			memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
 			old_currD = currD; p = diceNop(rng);
 			for(i=q-1;i>=m;i--) Sq[i+1] = Sq[i]; q++; Sq[m] = p; newWeight = UpdateWeight();
-			if(saved_distance_from_identity && distance_from_identity && val(rng) < 0.1){
+			if(saved_distance_from_identity && distance_from_identity && worm_exit_check()){
 				q=q_saved; memcpy(Sq,Sq_saved,q_saved*sizeof(int));
 				currWeight = UpdateWeight();
 			} else if(val(rng) < Metropolis(newWeight)){
@@ -451,7 +461,7 @@ void worm_update(){  // employing worm update in addition to other updates
 			m = int(val(rng)*q); p = Sq[m]; // m is between 0 and (q-1)
 			old_currD = currD; memcpy(Sq_backup,Sq,q*sizeof(int)); memcpy(Energies_backup,Energies,(q+1)*sizeof(double));
 			for(i=m;i<q-1;i++) Sq[i] = Sq[i+1]; q--; newWeight = UpdateWeight();
-			if(saved_distance_from_identity && distance_from_identity && val(rng) < 0.1){
+			if(saved_distance_from_identity && distance_from_identity && worm_exit_check()){
 				q=q_saved; memcpy(Sq,Sq_saved,q_saved*sizeof(int));
 				currWeight = UpdateWeight();
 			} else if(val(rng) < Metropolis(newWeight)/Nop){
@@ -523,6 +533,7 @@ void worm_update(){  // employing worm update in addition to other updates
 }
 
 void update(){
+	if(save_data_flag){ save_QMC_data(); exit(0); }
 	do worm_update(); while(distance_from_identity);
 }
 
