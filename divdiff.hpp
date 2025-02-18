@@ -67,7 +67,7 @@ public:
 			}
 		} else{
 			if(mantissa == 0.0){
-				res.mantissa = obj.mantissa; res.exponent = obj.exponent; res.normalize();
+				res.mantissa = -obj.mantissa; res.exponent = obj.exponent; res.normalize();
 			} else{
 				res.mantissa = mantissa - obj.mantissa*invPowersOf2[exponent - obj.exponent];
 				res.exponent = exponent; res.normalize();
@@ -103,7 +103,7 @@ public:
 			}
 		} else{
 			if(mantissa == 0.0){
-				mantissa = obj.mantissa; exponent = obj.exponent; normalize();
+				mantissa = -obj.mantissa; exponent = obj.exponent; normalize();
 			} else{
 				mantissa = mantissa - obj.mantissa*invPowersOf2[exponent - obj.exponent];
 				normalize();
